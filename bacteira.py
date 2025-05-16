@@ -276,13 +276,13 @@ def main():
         # Corrector step
         ### Update slip from predictor step
         print("Step 3")
-        Slip += 2.0 * kBT * M_RFD
+        # Slip += 2.0 * kBT * M_RFD
         ### Forces at Q^n+1/2
         r_vectors = np.array(cb.multi_body_pos())
         Force = Calc_Foces_Bodies(
             cb, theta, g, r_vectors, a, debye_length, repulsion_strength, Nbods
         )
-        Force += -2.0 * kBT * KT_RFD
+        # Force += -2.0 * kBT * KT_RFD
 
         RHS = np.concatenate((-Slip, -Force))
         RHS_norm = np.linalg.norm(RHS)
@@ -334,81 +334,6 @@ def main():
         cb.evolve_X_Q(U_full)
 
     print("Number of rejects: ", num_rejects)
-    # make a histogram of the h_coord
-    plt.figure()
-    bin_locs = np.linspace(1, 2, 200)
-    hists = []
-    for k in range(Nbods):
-        h_coord = np.array(h_coords[k])
-        # remove the first 1000 elements
-        cut = int(5.0 / dt)
-        h_coord = h_coord[cut::]
-        # use 100 bins from a to 2*a
-        # plt.hist(h_coord, bins=bin_locs)
-        # get the counts from the histogram without plotting
-        counts, bin_edges = np.histogram(h_coord, bins=bin_locs)
-        counts = counts.astype(float)
-        # normalize counts using trapezoidal rule
-        bin_dx = bin_edges[1] - bin_edges[0]
-        counts = counts / np.trapz(counts, dx=bin_dx)
-        bin_centers = (bin_edges[1:] + bin_edges[:-1]) / 2.0
-        hists.append(counts)
-
-        # make the plot color light grey
-        plt.plot(bin_centers, counts, "b--", linewidth=1)
-    # plot the average histogram
-    hists = np.array(hists)
-    counts_new = np.mean(hists, axis=0)
-    # normalize counts using trapezoidal rule
-    counts_new = counts_new / np.trapz(counts_new, dx=bin_dx)
-    plt.plot(
-        bin_centers,
-        counts_new,
-        "-",
-        color=(0.05, 0.65, 0.75),
-        label="Average Histogram",
-        linewidth=4,
-    )
-
-    # plt.plot(bin_centers, counts, 'b--', label='Histogram')
-    # normalize the histogram
-    # exact = np.load('./Hist_Data/hist_theory_42_blob.npz')
-    # plt.plot(exact['z'], exact['P'], 'k-', label='Theory')
-    Ph, hs = particle_wall_energy(
-        Cfg,
-        Radius,
-        a,
-        debye_length,
-        repulsion_strength,
-        g,
-        kBT,
-        heights=(Radius * bin_locs),
-    )
-    # bin_h = (hs[1] - hs[0])/Radius
-    # Ph = Ph/np.trapz(Ph, dx=bin_h)
-    plt.plot(hs, Ph, "r-", label="Theory")
-
-    Ph_avg, hs_avg = particle_wall_energy_cfg_avg(
-        Cfg,
-        Radius,
-        a,
-        debye_length,
-        repulsion_strength,
-        g,
-        kBT,
-        heights=(Radius * bin_locs),
-    )
-    plt.plot(hs_avg, Ph_avg, "k-", label="Histogram", linewidth=4)
-
-    # show legend
-    plt.legend()
-    plt.xlabel("h (um)")
-    plt.ylabel("Count")
-    plt.show()
-
-    # save the data to a file
-    np.savetxt("./Hist_Data/42_blob_dt_1em2_h_coord.txt", h_coord)
-
 
 def load_data(file_name):
     with open(file_name, "r") as f:
@@ -458,94 +383,6 @@ def wall_force_blobs(r_vectors, a, debye_length, repulsion_strength):
     # fb[sr_mask,2] += (repulsion_strength / debye_length)
 
     return fb.flatten()
-
-
-def wall_energy_blobs(r_vectors, a, debye_length, repulsion_strength):
-    """
-    Calculate the wall force using the Debye-Hückel theory.
-
-    Parameters
-    ----------
-    r_vectors : ndarray
-        blob positions
-    a : float
-        Radius of the blob.
-    debye_length : float
-        Debye length.
-    repulsion_strength : float
-        Repulsion strength.
-
-    Returns
-    -------
-    ndarray
-        Wall force.
-    """
-    # reshape r_vecrors to be (N,3)
-    r_vectors = r_vectors.reshape(-1, 3)
-    #
-    h = r_vectors[:, 2]
-    # this seems to fix the energy for debeye = 0.1*a but not for 0.5*a
-    # h += 0.75*debye_length
-    E = 0
-    for k in range(len(h)):
-        if h[k] > a:
-            E += (repulsion_strength) * np.exp(-(h[k] - a) / debye_length)
-        else:
-            E += (repulsion_strength) * (1.0 - (h[k] - a) / debye_length)
-    # E = 0*h
-    # lr_mask = h > a
-    # sr_mask = h <= a
-    # E[lr_mask] += (repulsion_strength) * np.exp(-(h[lr_mask]-a)/debye_length)
-    # E[sr_mask] += (repulsion_strength) * (1.0 - (h[sr_mask]-a)/debye_length)
-
-    return E  # np.sum(E)
-
-
-def particle_wall_energy(
-    Cfg, Radius, a, debye_length, repulsion_strength, g, kBT, heights=None
-):
-    if heights is None:
-        heights = np.linspace(0.0, 2 * Radius, 100)
-    P_h = np.zeros(heights.shape)
-    for k in range(len(heights)):
-        r_vectors = Cfg + np.array([0, 0, heights[k]])
-        E = wall_energy_blobs(r_vectors, a, debye_length, repulsion_strength)
-        E += (heights[k]) * g
-        P_h[k] = np.exp(-E / (kBT))
-    # normalize P_h using the trapezoidal rule
-    dh = heights[1] - heights[0]
-    P_h /= np.trapz(P_h, dx=dh)
-    return P_h, heights
-
-
-def particle_wall_energy_cfg_avg(
-    Cfg, Radius, a, debye_length, repulsion_strength, g, kBT, heights
-):
-    Ph_avg = np.zeros(heights.shape)
-    Nsamp = 1000
-    for junk in range(Nsamp):
-        Cfg_rot = np.zeros(Cfg.shape)
-        q_k = np.random.randn(4)
-        q_k /= np.linalg.norm(q_k)
-        for k in range(len(Cfg)):
-            Cfg_rot[k] = pyrot.from_quat(q_k).apply(Cfg[k])
-        Ph, hs = particle_wall_energy(
-            Cfg_rot,
-            Radius,
-            a,
-            debye_length,
-            repulsion_strength,
-            g,
-            kBT,
-            heights=(Radius * bin_locs),
-        )
-        Ph_avg += Ph
-    Ph_avg /= 1.0 * Nsamp
-    # normalize Ph_avg using the trapezoidal rule
-    dh = hs[1] - hs[0]
-    Ph_avg /= np.trapz(Ph_avg, dx=dh)
-    return Ph_avg, hs
-
 
 def wall_force_particle(theta, g):
     """
