@@ -48,7 +48,7 @@ def main():
     # Set some variables for the simulation
     a = 0.5 * sep
     L = 5 * L_rod
-    H = 5 * R_rod
+    H = L_rod
 
     # Create rigid bodies
     N_rigid_bodies = 10
@@ -63,7 +63,7 @@ def main():
     while len(X_0) < N_rigid_bodies and attempts < max_attempts:
         x = np.random.uniform(radius, L - radius)
         y = np.random.uniform(radius, L - radius)
-        new_pos = np.array([x, y, 0.5 * H])  # TODO could change z from constant
+        new_pos = np.array([x, y, 0.25 * H])  # TODO could change z from constant
 
         overlap = False
         for pos in X_0:
@@ -89,9 +89,9 @@ def main():
 
     # read in misc. parameters
     n_steps = 10000
-    n_plot = 20
+    n_plot = 50
     eta = 1.4e-3  # viscosity (Pa*s)
-    dt = 1e-2
+    dt = 2e-3
     kBT = 0.004142  # aJ
     g = 14.2926 * kBT
     theta = 0.0  # floor tilt angle
@@ -100,13 +100,13 @@ def main():
     Tol = 1.0e-3
     periodic_length = np.array([L, L, 0.0])
 
-    kBT = 0.0  # TODO TEMP
+    # kBT = 0.0
 
-    # solver = DPStokes("periodic", "periodic", "single_wall")
-    # solver.setParameters(Lx=L, Ly=L, zmin=0.0, zmax=H, allowChangingBoxSize=False)
+    solver = DPStokes("periodic", "periodic", "single_wall")
+    solver.setParameters(Lx=L, Ly=L, zmin=0.0, zmax=H, allowChangingBoxSize=False)
 
-    solver = NBody("open", "open", "single_wall")
-    solver.setParameters(wallHeight=0.0)
+    # solver = NBody("open", "open", "single_wall")
+    # solver.setParameters(wallHeight=0.0)
 
     solver.initialize(
         temperature=kBT, viscosity=eta, hydrodynamicRadius=a, needsTorque=False
@@ -176,6 +176,7 @@ def main():
             )
             fig_index += 1
 
+        step_start = time.time()
         ########################################################
         ################## Step 1 ##############################
         ########################################################
@@ -373,6 +374,8 @@ def main():
             h_coords[k].append(float(Xs[3 * k + 2]))
         # evolve rigid bodies
         cb.evolve_X_Q(U_full)
+        step_end = time.time()
+        print("Step time: ", step_end - step_start)
 
     print("Number of rejects: ", num_rejects)
 
@@ -397,6 +400,10 @@ def plot_positions(r_vectors, fig_index, L, H, Xs, Qs, cyl_length, cyl_radius):
     Xs = Xs.reshape(-1, 3)
     Qs = Qs.reshape(-1, 4)
 
+    box = np.array([L, L, 0])
+    temp = copy.deepcopy(Xs)
+    Xs = utils.periodize_r_vecs(Xs, box, len(Xs))
+
     # ax.scatter(r_vectors[0::3], r_vectors[1::3], r_vectors[2::3], c="r", marker="o")
 
     cyl_x, cyl_y, cyl_z = create_cylinder(radius=cyl_radius, length=cyl_length)
@@ -420,7 +427,6 @@ def plot_positions(r_vectors, fig_index, L, H, Xs, Qs, cyl_length, cyl_radius):
         Y = rotated[1].reshape(cyl_y.shape)
         Z = rotated[2].reshape(cyl_z.shape)
 
-        # Plot cylinder
         ax.plot_surface(X, Y, Z, color="b", alpha=0.7, linewidth=0)
 
     ax.set_xlim(0, L)
@@ -517,12 +523,7 @@ def calc_sterics(r_vectors, L, a, repulsion_strength, debye_length, Nbods):
         r_vectors, L, a, repulsion_strength, debye_length, list_of_neighbors, offsets
     )
 
-    body_sterics = np.zeros((2 * Nbods, 3))
-    for i in range(Nbods):
-        sterics_i = blob_sterics[i * N_per_body : (i + 1) * N_per_body]
-        body_sterics[2 * i, :] = np.sum(sterics_i, axis=0)
-
-    return body_sterics
+    return blob_sterics.flatten()
 
 
 def Calc_Foces_Bodies(
@@ -538,7 +539,10 @@ def Calc_Foces_Bodies(
     propelling_force = forward_orientation_force(cb, rod_mob_fact, Nbods)
     FT += propelling_force
 
-    FT += calc_sterics(r_vectors, L, a, repulsion_strength, debye_length, Nbods)
+    blob_sterics = calc_sterics(
+        r_vectors, L, a, repulsion_strength, debye_length, Nbods
+    )
+    FT += np.reshape(cb.KT_x_Lam(blob_sterics), (2 * Nbods, 3))
 
     return FT.flatten()
 
