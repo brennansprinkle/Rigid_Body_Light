@@ -9,21 +9,24 @@ import sys
 import time
 import copy
 
-import scipy.sparse as sp
+import scipy as sp
 import pyamg
 import matplotlib.pyplot as plt
-from scipy.spatial.transform import Rotation as pyrot
+from scipy.spatial.transform import Rotation as R
+
+import utils
+
 
 from libMobility import NBody, DPStokes
 
 # Find project functions
 found_functions = False
-path_to_append = './'
-sys.path.append('../')
-sys.path.append('./build/')
+path_to_append = "./"
+sys.path.append("../")
+sys.path.append("./build/")
 
 for i in range(10):
-    path_to_append += '../'
+    path_to_append += "../"
     sys.path.append(path_to_append)
 
 import c_rigid_obj as cbodies
@@ -34,63 +37,76 @@ def main():
     # load a numeric data file into Cfg and skip the first line
     # but keep the second number in the first line and save as a variable called s
 
-    struct_file = "./Structures/shell_N_42_Rg_0_8913_Rh_1.vertex"
-    # struct_file = './Structures/shell_N_162_Rg_0_9497_Rh_1.vertex'
-    # struct_file = './Structures/shell_N_642_Rg_0_9767_Rh_1.vertex'
-    # struct_file = './Structures/shell_N_2562_Rg_0_9888_Rh_1.vertex'
-    s, Cfg = load_data(struct_file)
-    Radius = 1.0  # 1.486
+    struct_file = "./Structures/Cylinder_N_86_Lg_1_9384_Rg_0_1484.vertex"
+    # struct_file = "./Structures/Cylinder_N_324_Lg_2_0299_Rg_0_1554.vertex"
+    Cfg = load_data(struct_file)
+    L_rod = 1.9384
+    R_rod = 0.1484
 
-    s, Cfg = load_data(struct_file)
-
-    s *= Radius
-    Cfg *= Radius
-
-    Nblobs_Per = len(Cfg)
+    sep = np.min(sp.spatial.distance.pdist(Cfg))
 
     # Set some variables for the simulation
-    a = 0.5 * s
-    output_name = "./data/test"
+    a = 0.5 * sep
+    L = 5 * L_rod
+    H = 5 * R_rod
 
     # Create rigid bodies
+    N_rigid_bodies = 10
     X_0 = []
-    Quat = []
+    quat = []
 
-    struct_location = np.array([0, 0, 1.2]) * Radius
-    struct_orientation = np.array([1.0, 0.0, 0.0, 0.0])
-    for k in range(10):
-        # random x y  location in the range -1e6 to 1e6
-        xy_loc = np.random.rand(2) * 1.0e3
-        xy_loc = 2.0 * xy_loc - 1e3
-        zshift = np.random.rand() * 0.4 * Radius
-        zshift -= 0.2 * Radius
-        loc = struct_location + np.array([xy_loc[0], xy_loc[1], zshift])
-        X_0.append(loc)
-        Quat.append(struct_orientation)
+    diameter = 1.1 * L_rod
+    radius = diameter / 2
 
-    Nbods = len(X_0)
+    attempts = 0
+    max_attempts = 1000
+    while len(X_0) < N_rigid_bodies and attempts < max_attempts:
+        x = np.random.uniform(radius, L - radius)
+        y = np.random.uniform(radius, L - radius)
+        new_pos = np.array([x, y, 0.5 * H])  # TODO could change z from constant
+
+        overlap = False
+        for pos in X_0:
+            if np.linalg.norm(new_pos - pos) < diameter:
+                overlap = True
+                break
+
+        if not overlap:
+            X_0.append(new_pos)
+            theta = np.random.uniform(0, 2 * np.pi)
+            q = R.from_euler("z", theta, degrees=False)
+            q = q.as_quat(scalar_first=True)
+            quat.append(q)
+        attempts += 1
+
+    if len(X_0) < N_rigid_bodies:
+        raise RuntimeError(
+            f"Could only place {len(X_0)} discs after {max_attempts} attempts. Try increasing L or reducing N."
+        )
+
     X_0 = np.array(X_0).flatten()
-    Quat = np.array(Quat).flatten()
+    quat = np.array(quat).flatten()
 
     # read in misc. parameters
     n_steps = 10000
-    n_save = 1
+    n_plot = 20
     eta = 1.4e-3  # viscosity (Pa*s)
     dt = 1e-2
-    kBT = 0.004142  # aJ # #0.0
+    kBT = 0.004142  # aJ
     g = 14.2926 * kBT
-    theta = 0.0  # np.pi/6.0
+    theta = 0.0  # floor tilt angle
     debye_length = 0.1 * a
     repulsion_strength = 4.0 * kBT
-    # kBT = 0.0
     Tol = 1.0e-3
-    periodic_length = np.array([0.0, 0.0, 0.0])
+    periodic_length = np.array([L, L, 0.0])
+
+    kBT = 0.0  # TODO TEMP
+
+    # solver = DPStokes("periodic", "periodic", "single_wall")
+    # solver.setParameters(Lx=L, Ly=L, zmin=0.0, zmax=H, allowChangingBoxSize=False)
 
     solver = NBody("open", "open", "single_wall")
-    solver.setParameters(wallHeight=0.0, Nbatch=Nbods, NperBatch=Nblobs_Per)
-
-    # solver = DPStokes("periodic", "periodic", "two_walls")
-    # solver.setParameters(Lx=L, Ly=L,zmin=0.0, zmax=5*a, allowChangingBoxSize=True)
+    solver.setParameters(wallHeight=0.0)
 
     solver.initialize(
         temperature=kBT, viscosity=eta, hydrodynamicRadius=a, needsTorque=False
@@ -111,9 +127,9 @@ def main():
     # Set the domain to have a wall
     cb.setWallPC(True)
 
-    numParts = Nbods * len(Cfg)
+    numParts = N_rigid_bodies * len(Cfg)
     cb.setParameters(numParts, a, dt, kBT, eta, periodic_length, Cfg)
-    cb.setConfig(X_0, Quat)
+    cb.setConfig(X_0, quat)
     print("set config")
     cb.set_K_mats()
     print("set K mats")
@@ -122,8 +138,8 @@ def main():
     ########################################## Solver params ###############################################
     ######################################################################################################
 
-    sz = 3 * Nbods * len(Cfg)
-    Nsize = sz + 6 * Nbods
+    sz = 3 * N_rigid_bodies * len(Cfg)
+    Nsize = sz + 6 * N_rigid_bodies
 
     num_rejects = 0
     Sol = np.zeros(Nsize)
@@ -133,7 +149,6 @@ def main():
 
     Qs, Xs = cb.getConfig()
     r_vectors = np.array(cb.multi_body_pos())
-    #
 
     num_rejects = 0
 
@@ -142,10 +157,12 @@ def main():
     # h_coord = [[],[],[]]
     # make h_coord a list of emppty lists
     h_coords = []
-    for k in range(Nbods):
+    for k in range(N_rigid_bodies):
         h_coords.append([])
 
+    fig_index = 0
     for n in range(n_steps):
+        print("Step: ", n)
         if n % 1000 == 0:
             print("Progress: ", 100 * ((1.0 * n) / n_steps))
         Qs, Xs = cb.getConfig()
@@ -153,15 +170,19 @@ def main():
         Qs_start = copy.deepcopy(Qs)
         r_vectors = np.array(cb.multi_body_pos())
 
-        # Calc_Foces_Bodies(cb, theta, g, r_vectors, a, debye_length, repulsion_strength)
+        if n % n_plot == 0:
+            plot_positions(
+                r_vectors, fig_index, L, H, Xs, Qs, cyl_length=L_rod, cyl_radius=R_rod
+            )
+            fig_index += 1
 
         ########################################################
         ################## Step 1 ##############################
         ########################################################
         # get Random rigid velocity for RFD
-        print("Step 1")
+        # print("Step 1")
         Slip = np.random.randn(sz)
-        Force = np.zeros(6 * Nbods)
+        Force = np.zeros(6 * N_rigid_bodies)
 
         start = time.time()
 
@@ -203,9 +224,9 @@ def main():
         )
 
         end = time.time()
-        print("Time GMRES: " + str(end - start) + " s")
-        # print(res_list)
-        print("GMRES its: " + str(len(res_list)))
+        # print("Time GMRES: " + str(end - start) + " s")
+        # # print(res_list)
+        # print("GMRES its: " + str(len(res_list)))
 
         # Extract the velocities from the GMRES solution
         Sol_RFD *= RHS_norm
@@ -233,13 +254,24 @@ def main():
         ################## Step 2 ##############################
         ########################################################
         # Predictor step
-        print("Step 2")
+        # print("Step 2")
         ### Slip to be used in both steps
         Slip, _ = solver.sqrtMdotW()
         Slip *= np.sqrt(2 * kBT / dt)
         ### Forces at Q^n
+        v_prescribed = 1.0
+        rod_mob_fact = 6 * np.pi * eta * a * v_prescribed
         Force = Calc_Foces_Bodies(
-            cb, theta, g, r_vectors, a, debye_length, repulsion_strength, Nbods
+            cb,
+            theta,
+            g,
+            r_vectors,
+            a,
+            debye_length,
+            repulsion_strength,
+            N_rigid_bodies,
+            rod_mob_fact,
+            periodic_length,
         )
 
         RHS = np.concatenate((-Slip, -Force))
@@ -259,9 +291,9 @@ def main():
         )
 
         end = time.time()
-        print("Time GMRES: " + str(end - start) + " s")
-        # print(res_list)
-        print("GMRES its: " + str(len(res_list)))
+        # print("Time GMRES: " + str(end - start) + " s")
+        # # print(res_list)
+        # print("GMRES its: " + str(len(res_list)))
 
         # Extract the velocities from the GMRES solution
         Sol_Pred *= RHS_norm
@@ -275,12 +307,21 @@ def main():
         ########################################################
         # Corrector step
         ### Update slip from predictor step
-        print("Step 3")
+        # print("Step 3")
         # Slip += 2.0 * kBT * M_RFD
         ### Forces at Q^n+1/2
         r_vectors = np.array(cb.multi_body_pos())
         Force = Calc_Foces_Bodies(
-            cb, theta, g, r_vectors, a, debye_length, repulsion_strength, Nbods
+            cb,
+            theta,
+            g,
+            r_vectors,
+            a,
+            debye_length,
+            repulsion_strength,
+            N_rigid_bodies,
+            rod_mob_fact,
+            periodic_length,
         )
         # Force += -2.0 * kBT * KT_RFD
 
@@ -307,9 +348,9 @@ def main():
         )
 
         end = time.time()
-        print("Time GMRES: " + str(end - start) + " s")
-        # print(res_list)
-        print("GMRES its: " + str(len(res_list)))
+        # print("Time GMRES: " + str(end - start) + " s")
+        # # print(res_list)
+        # print("GMRES its: " + str(len(res_list)))
 
         # Extract the velocities from the GMRES solution
         Sol_Corr *= RHS_norm
@@ -323,25 +364,83 @@ def main():
         U_full = 0.5 * (U_Pred + U_Corr)
         # sys.exit()
 
-        if np.linalg.norm(dt * U_full[0:3]) > 0.25 * Radius:
+        if np.linalg.norm(dt * U_full[0:3]) > 0.25 * L_rod:
             num_rejects += 1
             continue
             # sys.exit()
 
-        for k in range(Nbods):
+        for k in range(N_rigid_bodies):
             h_coords[k].append(float(Xs[3 * k + 2]))
         # evolve rigid bodies
         cb.evolve_X_Q(U_full)
 
     print("Number of rejects: ", num_rejects)
 
+
+def create_cylinder(radius=0.1, length=1.0, resolution=16):
+    """
+    Create a cylinder aligned along the x-axis, centered at the origin.
+    """
+    theta = np.linspace(0, 2 * np.pi, resolution)
+    x = np.linspace(-length / 2, length / 2, 2)  # <-- shift center
+    theta, x = np.meshgrid(theta, x)
+
+    y = radius * np.cos(theta)
+    z = radius * np.sin(theta)
+
+    return x, y, z
+
+
+def plot_positions(r_vectors, fig_index, L, H, Xs, Qs, cyl_length, cyl_radius):
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection="3d")
+    Xs = Xs.reshape(-1, 3)
+    Qs = Qs.reshape(-1, 4)
+
+    # ax.scatter(r_vectors[0::3], r_vectors[1::3], r_vectors[2::3], c="r", marker="o")
+
+    cyl_x, cyl_y, cyl_z = create_cylinder(radius=cyl_radius, length=cyl_length)
+
+    for i in range(len(Xs)):
+        pos = Xs[i]
+        quat = Qs[i]
+
+        # Convert quaternion to rotation matrix
+        rot = R.from_quat(quat, scalar_first=True).as_matrix()
+
+        # Flatten cylinder grid for transformation
+        points = np.vstack([cyl_x.ravel(), cyl_y.ravel(), cyl_z.ravel()])  # (3, N)
+        rotated = rot @ points  # Rotate (3, N)
+        rotated[0, :] += pos[0]
+        rotated[1, :] += pos[1]
+        rotated[2, :] += pos[2]
+
+        # Reshape back to meshgrid shape
+        X = rotated[0].reshape(cyl_x.shape)
+        Y = rotated[1].reshape(cyl_y.shape)
+        Z = rotated[2].reshape(cyl_z.shape)
+
+        # Plot cylinder
+        ax.plot_surface(X, Y, Z, color="b", alpha=0.7, linewidth=0)
+
+    ax.set_xlim(0, L)
+    ax.set_ylim(0, L)
+    ax.set_zlim(0, H)
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+    ax.set_box_aspect([L, L, H])  # Ensure aspect ratio
+    plt.tight_layout()
+    plt.savefig(f"img/fig_{fig_index}.png")
+    plt.close()
+
+
 def load_data(file_name):
     with open(file_name, "r") as f:
         lines = f.readlines()
         # s should be a float
-        s = float(lines[0].split()[1])
         Cfg = np.array([[float(j) for j in i.split()] for i in lines[1:]])
-    return s, Cfg
+    return Cfg
 
 
 def wall_force_blobs(r_vectors, a, debye_length, repulsion_strength):
@@ -366,55 +465,81 @@ def wall_force_blobs(r_vectors, a, debye_length, repulsion_strength):
     """
     # reshape r_vecrors to be (N,3)
     r_vectors = r_vectors.reshape(-1, 3)
-    #
-    fb = 0 * r_vectors
+
+    forces = np.zeros_like(r_vectors)
     h = r_vectors[:, 2]
-    # h -= 4*debye_length
     for k in range(len(h)):
         if h[k] > a:
-            fb[k, 2] = (repulsion_strength / debye_length) * np.exp(
+            forces[k, 2] = (repulsion_strength / debye_length) * np.exp(
                 -(h[k] - a) / debye_length
             )
         else:
-            fb[k, 2] = repulsion_strength / debye_length
-    # lr_mask = h > a
-    # sr_mask = h <= a
-    # fb[lr_mask,2] += (repulsion_strength / debye_length) * np.exp(-(h[lr_mask]-a)/debye_length)
-    # fb[sr_mask,2] += (repulsion_strength / debye_length)
+            forces[k, 2] = repulsion_strength / debye_length
 
-    return fb.flatten()
+    return forces.flatten()
 
-def wall_force_particle(theta, g):
-    """
-    Calculate the wall force using the Debye-Hückel theory.
 
-    Parameters
-    ----------
-    theta : float
-        Angle of the wall.
-    g : float
-        boyancy force.
-    Returns
-    -------
-    float
-        Wall force.
-    """
+def calc_grav_force(theta, g):
     f = np.zeros(3)
     f[2] = -g * np.cos(theta)
     f[0] = -g * np.sin(theta)
     return f
 
 
+def forward_orientation_force(cb, mob_fact, N):
+    F_mag = 6 * np.pi * mob_fact
+    quats, _ = cb.getConfig()
+    quats = quats.reshape(N, 4)
+    forces = np.zeros((2 * N, 3))
+
+    for i in range(N):
+        q = quats[i]
+        Ration = R.from_quat(q, scalar_first=True)
+        Ration = Ration.as_matrix()
+        forward_vector = np.array([1, 0, 0])
+        forward_vector = np.dot(Ration, forward_vector)
+        forward_vector = forward_vector / np.linalg.norm(forward_vector)
+        forward_force = F_mag * forward_vector
+
+        forces[2 * i] = forward_force
+
+    return forces
+
+
+def calc_sterics(r_vectors, L, a, repulsion_strength, debye_length, Nbods):
+
+    N_per_body = len(r_vectors) // 3 // Nbods
+
+    r_cut = 2 * a + 4 * debye_length
+    offsets, list_of_neighbors = utils.build_neighbor_list(r_vectors, L, r_cut)
+
+    blob_sterics = utils.blob_blob_sterics(
+        r_vectors, L, a, repulsion_strength, debye_length, list_of_neighbors, offsets
+    )
+
+    body_sterics = np.zeros((2 * Nbods, 3))
+    for i in range(Nbods):
+        sterics_i = blob_sterics[i * N_per_body : (i + 1) * N_per_body]
+        body_sterics[2 * i, :] = np.sum(sterics_i, axis=0)
+
+    return body_sterics
+
+
 def Calc_Foces_Bodies(
-    cb, theta, g, r_vectors, a, debye_length, repulsion_strength, Nbods
+    cb, theta, g, r_vectors, a, debye_length, repulsion_strength, Nbods, rod_mob_fact, L
 ):
     FT = np.zeros((2 * Nbods, 3))
     blob_force = wall_force_blobs(r_vectors, a, debye_length, repulsion_strength)
-    # sys.exit()
     FT += np.reshape(cb.KT_x_Lam(blob_force), (2 * Nbods, 3))
-    # FT[0,:] += np.sum(blob_force.reshape(-1, 3), axis=0)
-    grav_force = wall_force_particle(theta, g)
+
+    grav_force = calc_grav_force(theta, g)
     FT[0::2, :] += grav_force
+
+    propelling_force = forward_orientation_force(cb, rod_mob_fact, Nbods)
+    FT += propelling_force
+
+    FT += calc_sterics(r_vectors, L, a, repulsion_strength, debye_length, Nbods)
+
     return FT.flatten()
 
 
