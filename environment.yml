@@ -6,3 +6,4 @@ dependencies:
   - pybind11
   - StochasticHydroTools::libMobility
   - matplotlib
+  - numba
