@@ -1,0 +1,348 @@
+import time, copy, sys
+import numpy as np
+import solvers
+import scipy
+
+# find c++ functions
+sys.path.append('../')
+sys.path.append('./build/')
+import c_rigid_obj
+
+# we use tqdm for nice progress bars if it is available
+try:
+    import tqdm
+    import functools
+    progressbar = functools.partial(tqdm.tqdm)
+except ImportError:
+    class progressbar:
+        def __init__(*args):
+            pass
+        def update(*args):
+            pass
+        def close(*args):
+            pass
+
+
+struct_files = {
+    42: './Structures/shell_N_42_Rg_0_8913_Rh_1.vertex',
+    162: './Structures/shell_N_162_Rg_0_9497_Rh_1.vertex',
+    642: './Structures/shell_N_642_Rg_0_9767_Rh_1.vertex',
+    2562: './Structures/shell_N_2562_Rg_0_9888_Rh_1.vertex',
+}
+
+def load_struct_data(file_name):
+    with open(file_name, 'r') as f:
+        lines = f.readlines()
+        # s should be a float
+        s = float(lines[0].split()[1]) # what is s
+        blob_coords = np.array([[float(j) for j in i.split()] for i in lines[1:]])
+    return s, blob_coords
+
+def wall_force_blobs(r_vectors, a, debye_length, repulsion_strength):
+    """
+    Calculate the wall force using the Debye-Hückel theory.
+    
+    Parameters
+    ----------
+    r_vectors : ndarray
+        blob positions
+    a : float
+        Radius of the blob.
+    debye_length : float
+        Debye length.
+    repulsion_strength : float
+        Repulsion strength.
+    
+    Returns
+    -------
+    ndarray
+        Wall force.
+    """
+    # reshape r_vecrors to be (N,3)
+    r_vectors = r_vectors.reshape(-1, 3)
+    #
+    fb = 0*r_vectors
+    h = r_vectors[:,2]
+    lr_mask = h > a
+    sr_mask = h <= a
+    fb[lr_mask,2] += (repulsion_strength / debye_length) * np.exp(-(h[lr_mask]-a)/debye_length)
+    fb[sr_mask,2] += (repulsion_strength / debye_length)
+    
+    return fb.flatten()
+
+def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, theta=0, wall=True, T=298,
+        method='EMmid', struct_file_to_load=42, skip_seconds=2, verbose=False):
+    # load a numeric data file into Cfg and skip the first line
+    # but keep the second number in the first line and save as a variable called 
+
+    t0 = time.time()
+
+    hydrodynamic_diameter = 2.972 # um
+    bare_diameter = 2.82 # um
+    hydrodynamic_radius = hydrodynamic_diameter / 2
+    bare_radius = bare_diameter / 2
+
+    metadata = dict(
+        dt = dt,
+        shear = shear_size,
+        gravity = gravity,
+        theta = theta,
+        wall = wall,
+        T = T,
+        method = method,
+        particle_diameter = hydrodynamic_diameter,
+        bare_particle_diameter = bare_diameter,
+    )
+
+    print('body_radius', hydrodynamic_radius)
+    print(f'theta = {theta} = {theta * np.pi / 180}')
+
+    struct_file = struct_files[struct_file_to_load]
+    metadata['num_blobs'] = struct_file_to_load
+    
+    blob_diameter, initial_blob_coords = load_struct_data(struct_file)
+
+    blob_diameter       *= hydrodynamic_radius
+    initial_blob_coords *= hydrodynamic_radius
+    metadata['initial_blob_coords'] = initial_blob_coords
+    metadata['blob_diameter'] = blob_diameter
+
+    # Set some variables for the simulation
+    blob_radius = 0.5*blob_diameter
+
+    # Create rigid bodies
+    X_0 = []
+    Quat = []
+
+    Nbodies = 1
+
+    struct_location = np.array([0, 0, 1.2]) * hydrodynamic_radius
+    struct_orientation = np.array([1.0, 0.0, 0.0, 0.0])
+    for k in range(Nbodies):
+        X_0.append(struct_location)
+        Quat.append(struct_orientation)
+
+    X_0 = np.array(X_0).flatten()
+    Quat = np.array(Quat).flatten()
+    
+        
+    # read in misc. parameters
+    eta = 1.75e-03 # viscosity (Pa*s), from Eleanor in Slack
+    # kT = 0.004142 #aJ # #0.0
+    atto = 1e-18
+    k_B = scipy.constants.k / atto
+    kT = k_B * T # in aJ
+    # g = 16*kT
+
+    metadata['eta'] = eta
+
+    # calculate magnitude of gravity force
+    body_volume = 4/3*np.pi*bare_radius**3 # um^3
+    rho_particles = 1510 # kg/m^3 (collective diffusion paper SI)
+    rho_water = 970 # kg/m^3 (Eleanor in slack)
+    delta_rho = rho_particles - rho_water # kg/m^3
+    delta_rho *= (1e-6)**3 # kg/um^3
+    effective_mass = delta_rho * body_volume # kg
+    g = scipy.constants.g # ms^-2
+    f_gravity_mag = effective_mass * g # N
+    f_gravity_mag *= 1e12 # pN. approx 16kT
+    metadata['delta_rho'] = delta_rho
+    metadata['f_gravity_mag'] = f_gravity_mag
+
+    # other parameters
+    # debye_length = 0.1*blob_radius
+    debye_length = 0.0122 * 120/170 # 0.1*blob_radius for 42 blobs, diameter=2.92. 120/170 b/c that gave d=170nm, but Eleanor says it's 120nm
+    print('debye length', debye_length)
+    print('debye ratio', 0.1395/debye_length)
+    repulsion_strength = 4.0 * 296 * k_B # 2D monolayer sims used 0.0163 which is 0.98*4*kT
+    # print('repulsion ratio', 0.0163/repulsion_strength)
+    Tol = 1.0e-3
+    periodic_length = np.array([0.0, 0.0, 0.0])
+
+    metadata['debye_length'] = debye_length
+    metadata['repulsion_strength'] = repulsion_strength
+    metadata['gmres_tol'] = Tol
+    
+    
+    print('a is: '+str(blob_radius))
+    print('diffusive blob timestep is: '+str(kT*dt/(6*np.pi*eta*blob_radius**3)))
+
+    
+    # Make solver object
+    cb = c_rigid_obj.CManyBodies()
+    
+    # Sets the PC type
+    # If true will use the block diag 'Dilute suspension approximation' to M
+    # For dense suspensions this is a bad approximation (try setting false)
+    # for rigid bodies with lots of blobs this is expensive (try setting flase)
+    cb.setBlkPC(False)
+
+    # Set the domain to have a wall
+    cb.setWallPC(True)
+    
+    
+    numParts = Nbodies*len(initial_blob_coords)
+    cb.setParameters(numParts, blob_radius, dt, kT, eta, periodic_length, initial_blob_coords)
+    cb.setConfig(X_0, Quat)
+    print('set config')
+    cb.set_K_mats()
+    print('set K mats')
+    
+    
+    num_blob_coords = 3*Nbodies*len(initial_blob_coords)
+    Nsize = num_blob_coords + 6*Nbodies
+    
+    num_rejects = 0
+    Sol = np.zeros(Nsize)
+        
+    # Qs, Xs = cb.getConfig()
+    # r_vectors = np.array(cb.multi_body_pos())
+    # FT = np.zeros((2, 3))
+    
+    # Force = FT.flatten()
+    # Slip = np.zeros(sz)
+    # gamma = 1.0
+    if output_name:
+        print('saving to', output_name)
+    else:
+        print('warning: not saving data')
+        
+    num_rejects = 0
+
+    print(f'shear: {shear_size}, gravity: {gravity}, wall: {wall}, kT: {kT}')
+
+    n_steps = int(t_max  / dt)
+    n_save  = int(t_save / dt)
+    skip_timesteps = skip_seconds / dt
+    skip_saves = skip_timesteps / n_save
+    num_output_rows = int(n_steps / n_save - 1 - skip_saves)
+    particles = np.full((num_output_rows, 9), np.nan)
+    print(f'particles array size, {particles.nbytes/1e9:.1f}GB')
+
+    exception = False
+
+    gmres_x0 = None
+
+    gmres_num = []
+    gmres_num_p = []
+    gmres_num_m = []
+
+    gmres_guess = None
+
+    progress = progressbar(total=n_steps, mininterval=10)
+    n = 0
+    while n < n_steps:
+        # we use a while not a for, because if the step gets retried we don't want n to increment
+        
+        force_torque_body = np.zeros((2, 3))
+        Slip = np.zeros(num_blob_coords)
+
+        blob_coords = np.array(cb.multi_body_pos())
+        Qs, Xs = cb.getConfig()
+        
+        Xs_start = copy.deepcopy(Xs) # we copy these now so we can use them to
+        Qs_start = copy.deepcopy(Qs) # reset the configuration after the RFD, or if we get a bad timestep
+
+        if not gravity and not wall and shear_size == 0 and kT == 0:
+            assert np.all(Xs == X_0)
+
+        ### add shear
+        Slip[0::3] = -1.0*blob_coords[2::3] * shear_size
+
+        ### add gravity
+        if gravity:
+            f_gravity_x = - f_gravity_mag * np.sin(theta * np.pi / 180)
+            f_gravity_z = - f_gravity_mag * np.cos(theta * np.pi / 180)
+            assert f_gravity_z <= 0
+            gravity_force = [f_gravity_x, 0, f_gravity_z]
+            force_torque_body[0, 0] += f_gravity_x
+            force_torque_body[0, 2] += f_gravity_z
+
+        ### add sterics with wall
+        if wall:
+            wall_force_temp = wall_force_blobs(blob_coords, blob_radius, debye_length, repulsion_strength)
+            wall_force = np.reshape(cb.KT_x_Lam(wall_force_temp), (2*Nbodies, 3))
+            force_torque_body += wall_force
+
+        ### use the solver to get the velocities from the forces
+        if method == 'EMmid':
+            Lambda, U_s, gmres_guess = solvers.solver_EMmid(
+                Nbodies = Nbodies,
+                Nblobs  = len(initial_blob_coords),
+                Force   = force_torque_body.flatten(),
+                Slip    = Slip,
+                cb      = cb,
+                Tol     = Tol,
+                X_Guess = gmres_guess,
+                verbose = verbose
+            )
+
+        elif method.startswith('EMRFD'):
+            Lambda, U_s, gmres_guess = solvers.solver_EMRFD(
+                Nbodies  = Nbodies,
+                Nblobs   = len(initial_blob_coords),
+                Force    = force_torque_body.flatten(),
+                Slip     = Slip,
+                cb       = cb,
+                dt       = dt,
+                kBT      = kT,
+                Tol      = Tol,
+                U_guess  = gmres_guess,
+                Xs_start = Xs_start,
+                Qs_start = Qs_start,
+                verbose  = verbose
+            )
+        
+        else:
+            raise Exception(f'unknown method {method}')
+            
+        if np.any(np.abs(U_s).max() > 1e5):
+            print('U_s has elements greater than 1e5')
+
+        # evolve rigid bodies (use the velocities to update the positions and orientations)
+        cb.evolve_X_Q(U_s)
+        blob_coords_new = np.array(cb.multi_body_pos())
+        
+        if np.linalg.norm(blob_coords - blob_coords_new, ord=np.inf) > 4*blob_radius:
+            num_rejects += 1
+            print(f'Bad Timestep!! {n}')
+            cb.setConfig(Xs_start, Qs_start) # reset the positions and orientations
+            continue
+
+        # save data
+        if output_name and n % n_save == 0 and n > skip_timesteps:
+            frame = (n - skip_timesteps) / n_save
+
+            saving_index = int((n - skip_timesteps) / n_save - 1)
+            assert saving_index >= 0
+
+            particles[saving_index, [0, 1, 2]] = Xs[[0, 1, 2]]
+            particles[saving_index, 3] = frame
+            particles[saving_index, 4] = 0 # ID always zero cause there's only one particle
+            particles[saving_index, [5, 6, 7, 8]] = Qs
+
+        # error checking
+        Qs_new, Xs_new = cb.getConfig()
+        
+        if np.max(np.abs(Xs - Xs_new)) > 10:
+            print()
+            print('U_s', U_s) # rigid forces and torques
+            print('position', Xs_new)
+            if wall:
+                print('force wall', wall_force)
+            if gravity:
+                print('force grav', gravity_force)
+            print('change in position', Xs_new - Xs)
+            raise Exception(f'particle moved more than 10um')
+
+        if gravity:
+            assert Xs_new[2] < 20, f'z = {Xs_new[2]}'
+
+        n += 1
+        progress.update()
+
+    if output_name:
+        np.savez(output_name, particles=particles, computation_time=time.time()-t0, **metadata)
+        print('saved data to', output_name)
+    
+    return particles, metadata

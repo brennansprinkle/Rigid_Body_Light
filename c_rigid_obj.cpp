@@ -678,7 +678,7 @@ public:
   
   
   SparseM PC_invM(){
-      std::cout << "Making PC mats\n";
+    //   std::cout << "Making PC mats\n";
       if(!block_diag_PC){
         std::vector<real> r_vectors = multi_body_pos();
         return diag_invM(r_vectors);
@@ -1132,7 +1132,7 @@ public:
             t = timeNow();
             Vector M_half_W1 = M_half_W();
             elapsed = timeNow() - t;
-            printf( "Root time = %g\n", elapsed );
+            // printf( "Root time = %g\n", elapsed );
             Vector M_half_W2;
             if(split_rand){
                 M_half_W2 = M_half_W();
@@ -1142,9 +1142,9 @@ public:
             //std::cout << "M*w1: " << M_half_W2.segment<3>(0) << "\n";
             
             // Make M_RFD
-            std::cout << "Before RFD\n";
+            // std::cout << "Before RFD\n";
             M_RFD_vec = M_RFD();
-            std::cout << "After RFD\n";
+            // std::cout << "After RFD\n";
                     
             // Set predictor velocity
             double c_1, c_2;
