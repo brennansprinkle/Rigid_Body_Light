@@ -503,6 +503,14 @@ public:
      return K*U;
   }
 
+  Vector Kinv_x_V(RefVector& V){
+     return Kinv*V;
+  }
+
+  Vector KTinv_x_F(RefVector& F){
+     return Kinv.transpose()*F;
+  }
+
   Vector KT_x_Lam(RefVector& Lam){
      return KT*Lam;
   }
@@ -1000,6 +1008,33 @@ public:
     }
     
     template<class AVector>
+    auto M_RFD_cfgs(AVector& U, double delta){        
+        
+        int sz = 3*N_bod*N_blb;
+       // Make random vector
+        Vector W = rand_vector(sz);
+        
+        //Vector UOM = Kinv*W;
+        
+        std::vector<Quat> Qp;
+        std::vector<Vector> Xp;
+        std::vector<Quat> Qm;
+        std::vector<Vector> Xm;
+        
+        
+        Vector Win = ((delta/2.0)*U);
+        std::tie(Qp,Xp) = update_X_Q(Win);
+        std::vector<real> r_vec_p =  r_vecs_from_cfg(Xp,Qp);
+        Win *= -1.0;
+        std::tie(Qm,Xm) = update_X_Q(Win);
+        std::vector<real> r_vec_m =  r_vecs_from_cfg(Xm,Qm);
+                
+        return std::make_tuple(r_vec_p,r_vec_m);
+    }
+
+
+
+    template<class AVector>
     Vector M_RFD_from_U(AVector& U, AVector& W){        
         
         double delta = 1.0e-3;
@@ -1219,6 +1254,10 @@ PYBIND11_MODULE(c_rigid_obj, m) {
 	  "Set the K,K^T,K^-1 matrices for the module").
       def("K_x_U", &CManyBodies::K_x_U,
 	  "Multiply K by U").
+      def("Kinv_x_V", &CManyBodies::Kinv_x_V,
+	  "Multiply Kinv by V").
+    def("KTinv_x_F", &CManyBodies::KTinv_x_F,
+	  "Multiply KTinv by F").
     def("KT_x_Lam", &CManyBodies::KT_x_Lam,
 	  "Multiply K^T by Lambda").
       def("apply_PC", &CManyBodies::apply_PC<RefVector& >,
@@ -1241,6 +1280,8 @@ PYBIND11_MODULE(c_rigid_obj, m) {
 	  "KTinv_RFD").
       def("M_RFD", &CManyBodies::M_RFD,
 	  "M_RFD").
+      def("M_RFD_cfgs", &CManyBodies::M_RFD_cfgs<RefVector& >,
+	  "M_RFD_cfgs").
     def("M_half_W", &CManyBodies::M_half_W,
 	  "M_half_W").
       def("RHS_and_Midpoint", &CManyBodies::RHS_and_Midpoint,

@@ -207,7 +207,7 @@ if __name__ == '__main__':
 
         struct_location = np.array([0,0,1.2])*Radius
         struct_orientation = np.array([1.0,0.0,0.0,0.0])
-        for k in range(10):
+        for k in range(50):
             # random x y  location in the range -1e6 to 1e6
             xy_loc = np.random.rand(2)*1.0e3
             xy_loc = 2.0*xy_loc - 1e3

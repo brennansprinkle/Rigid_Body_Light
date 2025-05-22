@@ -1,2 +1,5 @@
+.cache/
+.vscode/
+__pycache__/
 build/*
-__pycache__/*
+compile_commands.json
