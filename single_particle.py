@@ -2,6 +2,7 @@ import time, copy, sys
 import numpy as np
 import solvers
 import scipy
+import libMobility
 
 # find c++ functions
 sys.path.append('../')
@@ -71,7 +72,7 @@ def wall_force_blobs(r_vectors, a, debye_length, repulsion_strength):
     return fb.flatten()
 
 def calc_force_torque_body(gravity, wall, f_gravity_mag, theta, blob_radius, debye_length, repulsion_strength, cb, Nbodies):
-    force_torque_body = np.zeros((2, 3))
+    force_torque_body = np.zeros((Nbodies, 2, 3)) # axis=0: body, axis=1: force/torque, axis=2: x/y/z
 
     blob_coords = np.array(cb.multi_body_pos())
 
@@ -80,21 +81,22 @@ def calc_force_torque_body(gravity, wall, f_gravity_mag, theta, blob_radius, deb
         f_gravity_x = - f_gravity_mag * np.sin(theta * np.pi / 180)
         f_gravity_z = - f_gravity_mag * np.cos(theta * np.pi / 180)
         assert f_gravity_z <= 0
-        force_torque_body[0, 0] += f_gravity_x
-        force_torque_body[0, 2] += f_gravity_z
+        force_torque_body[:, 0, 0] += f_gravity_x # [:, 0, 0] is all bodies, force, x
+        force_torque_body[:, 0, 2] += f_gravity_z # [:, 0, 2] is all bodies, force, z
 
     ### add sterics with wall
     if wall:
         wall_force_temp = wall_force_blobs(blob_coords, blob_radius, debye_length, repulsion_strength)
-        wall_force = np.reshape(cb.KT_x_Lam(wall_force_temp), (2*Nbodies, 3))
+        wall_force = np.reshape(cb.KT_x_Lam(wall_force_temp), (Nbodies, 2, 3))
         force_torque_body += wall_force
 
     return force_torque_body.flatten()
 
 def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, theta=0, wall=True, T=298,
-        method='EMmid', struct_file_to_load=42, skip_seconds=2, verbose=False):
-    # load a numeric data file into Cfg and skip the first line
-    # but keep the second number in the first line and save as a variable called 
+        method='EMmid', struct_file_to_load=42, skip_seconds=2, verbose=False, Nbodies=1):
+    
+    if Nbodies > 1:
+        assert method in ['Trap']
 
     t0 = time.time()
 
@@ -123,6 +125,7 @@ def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, 
     metadata['num_blobs'] = struct_file_to_load
     
     blob_diameter, initial_blob_coords = load_struct_data(struct_file)
+    Nblobs_per_body = len(initial_blob_coords)
 
     blob_diameter       *= hydrodynamic_radius
     initial_blob_coords *= hydrodynamic_radius
@@ -138,24 +141,27 @@ def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, 
 
     Nbodies = 1
 
-    struct_location = np.array([0, 0, 1.2]) * hydrodynamic_radius
-    struct_orientation = np.array([1.0, 0.0, 0.0, 0.0])
+    default_struct_location = np.array([0, 0, 1.2]) * hydrodynamic_radius
+    default_struct_orientation = np.array([1.0, 0.0, 0.0, 0.0])
     for k in range(Nbodies):
-        X_0.append(struct_location)
-        Quat.append(struct_orientation)
+        # random x y  location in the range -1e6 to 1e6
+        xy_loc = np.random.rand(2)*1.0e3
+        xy_loc = 2.0*xy_loc - 1e3
+        zshift = np.random.rand()*0.4*hydrodynamic_radius
+        zshift -= 0.2*hydrodynamic_radius # why are we doing this?
+        loc = default_struct_location + np.array([xy_loc[0],xy_loc[1],zshift])
+        X_0.append(loc)
+        Quat.append(default_struct_orientation)
 
     X_0 = np.array(X_0).flatten()
     Quat = np.array(Quat).flatten()
     
         
-    # read in misc. parameters
+    # misc. parameters
     eta = 1.75e-03 # viscosity (Pa*s), from Eleanor in Slack
-    # kT = 0.004142 #aJ # #0.0
     atto = 1e-18
     k_B = scipy.constants.k / atto
     kT = k_B * T # in aJ
-    # g = 16*kT
-
     metadata['eta'] = eta
 
     # calculate magnitude of gravity force
@@ -237,12 +243,26 @@ def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, 
     n_save  = int(t_save / dt)
     skip_timesteps = skip_seconds / dt
     skip_saves = skip_timesteps / n_save
-    if output_name:
-        num_output_rows = int(n_steps / n_save - 1 - skip_saves)
-        particles = np.full((num_output_rows, 9), np.nan)
-        print(f'particles array size, {particles.nbytes/1e9:.1f}GB')
+    num_output_rows = int(n_steps / n_save - 1 - skip_saves)
+    particles = np.full((num_output_rows, 9), np.nan)
+    print(f'particles array size, {particles.nbytes/1e9:.1f}GB')
 
     gmres_guess = None
+
+    if Nbodies > 1:
+        if method == 'Trap':
+            
+            libmobility_solver = libMobility.NBody("open", "open", "single_wall")
+            libmobility_solver.setParameters(wallHeight=0.0, Nbatch=Nbodies, NperBatch=Nblobs_per_body)
+            # solver = DPStokes("periodic", "periodic", "two_walls")
+            # solver.setParameters(Lx=L, Ly=L,zmin=0.0, zmax=5*a, allowChangingBoxSize=True)
+
+            libmobility_solver.initialize(
+                temperature        = kT,
+                viscosity          = eta,
+                hydrodynamicRadius = hydrodynamic_radius,
+                needsTorque        = False
+            )
 
     
     # we need to let the solver calculate the forces b/c the Trap solver calcluates forces for different configurations
@@ -282,7 +302,7 @@ def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, 
         if method == 'EMmid':
             Lambda, U_s, gmres_guess = solvers.solver_EMmid(
                 Nbodies                    = Nbodies,
-                Nblobs                     = len(initial_blob_coords),
+                Nblobs                     = Nblobs_per_body,
                 force_torque_body_function = force_torque_body_function,
                 Slip                       = Slip,
                 cb                         = cb,
@@ -294,7 +314,7 @@ def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, 
         elif method.startswith('EMRFD'):
             Lambda, U_s, gmres_guess = solvers.solver_EMRFD(
                 Nbodies                    = Nbodies,
-                Nblobs                     = len(initial_blob_coords),
+                Nblobs                     = Nblobs_per_body,
                 force_torque_body_function = force_torque_body_function,
                 Slip                       = Slip,
                 cb                         = cb,
@@ -308,19 +328,36 @@ def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, 
             )
 
         elif method == 'Trap':
-            Lambda, U_s = solvers.solver_trap(
-                Nbodies                    = Nbodies,
-                Nblobs                     = len(initial_blob_coords),
-                force_torque_body_function = force_torque_body_function,
-                Slip                       = Slip,
-                cb                         = cb,
-                dt                         = dt,
-                kBT                        = kT,
-                Tol                        = Tol,
-                Xs_start                   = Xs_start,
-                Qs_start                   = Qs_start,
-                verbose                    = verbose,
-            )
+            if Nbodies == 1:
+                Lambda, U_s = solvers.solver_trap(
+                    Nbodies                    = Nbodies,
+                    Nblobs                     = Nblobs_per_body,
+                    force_torque_body_function = force_torque_body_function,
+                    Slip                       = Slip,
+                    cb                         = cb,
+                    dt                         = dt,
+                    kBT                        = kT,
+                    Tol                        = Tol,
+                    Xs_start                   = Xs_start,
+                    Qs_start                   = Qs_start,
+                    verbose                    = verbose,
+                )
+
+            else:
+                Lambda, U_s = solvers.solver_trap_libmobility(
+                    Nbodies                    = Nbodies,
+                    Nblobs                     = Nblobs_per_body,
+                    force_torque_body_function = force_torque_body_function,
+                    Slip                       = Slip,
+                    cb                         = cb,
+                    dt                         = dt,
+                    kBT                        = kT,
+                    Tol                        = Tol,
+                    Xs_start                   = Xs_start,
+                    Qs_start                   = Qs_start,
+                    libmobility_solver         = libmobility_solver,
+                    verbose                    = verbose,
+                )
         
         else:
             raise Exception(f'unknown method {method}')

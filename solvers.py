@@ -281,3 +281,155 @@ def solver_trap(Nbodies, Nblobs, force_torque_body_function, Slip, cb, dt, kBT, 
     U_full = 0.5*(U_Pred + U_Corr)
 
     return Lambda_Corr, U_full
+
+
+def solver_trap_libmobility(Nbodies, Nblobs, force_torque_body_function, Slip, cb, dt, kBT, Tol, Xs_start, Qs_start, libmobility_solver, verbose=False):
+    Nsize = 3 * Nbodies * Nblobs + 6 * Nbodies
+    sz = 3 * Nbodies * Nblobs # can we please come up with a better name for this?
+
+    ########################################################
+    ################## Step 1 ##############################
+    ########################################################
+
+    # get Random rigid velocity for RFD
+    if verbose:
+        print('Step 1')
+    Slip = np.random.randn(sz)
+    Force = np.zeros(6*Nbodies)
+
+    start = time.time()
+    
+    RHS = np.concatenate((-Slip, -Force))
+    
+    RHS_norm = np.linalg.norm(RHS)
+    end = time.time()
+    #print("Time RHS: "+str(end - start)+" s")
+    
+    libmobility_solver.setPositions(r_vectors)
+    def apply_Saddle_mdot(x):
+        out = 0*x
+        Lam = x[0:sz]
+        U = x[sz::]
+        vels, _ = libmobility_solver.Mdot(Lam) 
+        out[0:sz] = vels - cb.K_x_U(U)
+        out[sz::] = cb.KT_x_Lam(Lam)
+        out[sz::] *= -1.0
+        return out
+    
+    A = spla.LinearOperator((Nsize, Nsize), matvec=apply_Saddle_mdot, dtype='float64')
+    PC = spla.LinearOperator((Nsize, Nsize), matvec=cb.apply_PC, dtype='float64')
+    
+    res_list = []
+    start = time.time()
+    
+    (Sol_RFD, info_RFD) = pyamg.krylov.gmres(A, (RHS/RHS_norm), x0=None, tol=Tol, M=PC, #
+                                                maxiter=min(300, Nsize), restrt=None, residuals=res_list)
+    
+    end = time.time()
+    if verbose:
+        print("Time GMRES: "+str(end - start)+" s")
+        #print(res_list)
+        print('GMRES its: '+str(len(res_list)))
+    
+    # Extract the velocities from the GMRES solution
+    Sol_RFD *= RHS_norm
+    Lambda_RFD = Sol_RFD[0:sz] # Don't care
+    U_RFD = Sol_RFD[sz::] # U =  N*K^T*M^{-1}*W 
+
+    ########## RFD ##########
+    delta_rfd = 1.0e-3
+    r_vec_p,r_vec_m = cb.M_RFD_cfgs(U_RFD,delta_rfd)
+    r_vec_p = np.array(r_vec_p)
+    r_vec_m = np.array(r_vec_m)
+    libmobility_solver.setPositions(r_vec_p)
+    MpW, _ = libmobility_solver.Mdot(Slip)
+    libmobility_solver.setPositions(r_vec_m)
+    MmW, _ = libmobility_solver.Mdot(Slip)
+    libmobility_solver.setPositions(r_vectors)
+    M_RFD = (1.0/delta_rfd)*(MpW - MmW)
+    KT_RFD = cb.KT_RFD_from_U(U_RFD,Slip)
+
+    # print('KT_RFD: ',np.linalg.norm(KT_RFD))
+    # print('M_RFD: ',np.linalg.norm(M_RFD))
+    # print('U_RFD: ',U_RFD)
+    
+    ########################################################
+    ################## Step 2 ##############################
+    ########################################################
+    # Predictor step
+    if verbose:
+        print('Step 2')
+    ### Slip to be used in both steps
+    Slip, _ = libmobility_solver.sqrtMdotW()
+    Slip *= np.sqrt(2*kBT/dt)
+    ### Forces at Q^n
+    Force = force_torque_body_function(cb=cb)
+
+    RHS = np.concatenate((-Slip, -Force))
+    RHS_norm = np.linalg.norm(RHS)
+    res_list = []
+    start = time.time()
+    
+    
+    (Sol_Pred, info_Pred) = pyamg.krylov.gmres(A, (RHS/RHS_norm), x0=None, tol=Tol, M=PC, #
+                                                maxiter=min(300, Nsize), restrt=None, residuals=res_list)
+    
+    end = time.time()
+    if verbose:
+        print("Time GMRES: "+str(end - start)+" s")
+        #print(res_list)
+        print('GMRES its: '+str(len(res_list)))
+    
+    # Extract the velocities from the GMRES solution
+    Sol_Pred *= RHS_norm
+    Lambda_Pred = Sol_Pred[0:sz] # Don't care
+    U_Pred = Sol_Pred[sz::] # N*F + sqrt(2*kBT/dt)*N^{1/2}*W
+
+
+    cb.evolve_X_Q(U_Pred)
+
+
+    ########################################################
+    ################## Step 3 ##############################
+    ########################################################
+    # Corrector step
+    ### Update slip from predictor step
+    if verbose:
+        print('Step 3')
+    Slip += 2.0*kBT*M_RFD
+    ### Forces at Q^n+1/2
+    r_vectors = np.array(cb.multi_body_pos())
+    Force = force_torque_body_function(cb=cb)
+    Force += -2.0*kBT*KT_RFD
+
+
+    RHS = np.concatenate((-Slip, -Force))
+    RHS_norm = np.linalg.norm(RHS)
+
+    libmobility_solver.setPositions(r_vectors)
+    A = spla.LinearOperator((Nsize, Nsize), matvec=apply_Saddle_mdot, dtype='float64')
+
+    res_list = []
+    start = time.time()
+    
+    (Sol_Corr, info_Corr) = pyamg.krylov.gmres(A, (RHS/RHS_norm), x0=(Sol_Pred/RHS_norm), tol=Tol, M=PC, #
+                                                maxiter=min(300, Nsize), restrt=None, residuals=res_list)
+    
+    end = time.time()
+    if verbose:
+        print("Time GMRES: "+str(end - start)+" s")
+        #print(res_list)
+        print('GMRES its: '+str(len(res_list)))
+    
+    # Extract the velocities from the GMRES solution
+    Sol_Corr *= RHS_norm
+    Lambda_Corr = Sol_Corr[0:sz] # Don't care
+    U_Corr = Sol_Corr[sz::] # Corrector veloctity
+
+    cb.setConfig(Xs_start,Qs_start)
+    cb.set_K_mats() 
+
+    # full velocity
+    U_full = 0.5*(U_Pred + U_Corr)
+
+    return Lambda_Corr, U_full
