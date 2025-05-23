@@ -7,4 +7,4 @@ cd build
 cmake ..
 make
 ```
-if build fails delete cmake cache and run again
+if build fails delete CMakeCache.txt and run make again

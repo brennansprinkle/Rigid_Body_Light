@@ -15,11 +15,11 @@ try:
     progressbar = functools.partial(tqdm.tqdm)
 except ImportError:
     class progressbar:
-        def __init__(*args):
+        def __init__(*args, **kwargs):
             pass
-        def update(*args):
+        def update(*args, **kwargs):
             pass
-        def close(*args):
+        def close(*args, **kwargs):
             pass
 
 
@@ -70,6 +70,27 @@ def wall_force_blobs(r_vectors, a, debye_length, repulsion_strength):
     
     return fb.flatten()
 
+def calc_force_torque_body(gravity, wall, f_gravity_mag, theta, blob_radius, debye_length, repulsion_strength, cb, Nbodies):
+    force_torque_body = np.zeros((2, 3))
+
+    blob_coords = np.array(cb.multi_body_pos())
+
+    ### add gravity
+    if gravity:
+        f_gravity_x = - f_gravity_mag * np.sin(theta * np.pi / 180)
+        f_gravity_z = - f_gravity_mag * np.cos(theta * np.pi / 180)
+        assert f_gravity_z <= 0
+        force_torque_body[0, 0] += f_gravity_x
+        force_torque_body[0, 2] += f_gravity_z
+
+    ### add sterics with wall
+    if wall:
+        wall_force_temp = wall_force_blobs(blob_coords, blob_radius, debye_length, repulsion_strength)
+        wall_force = np.reshape(cb.KT_x_Lam(wall_force_temp), (2*Nbodies, 3))
+        force_torque_body += wall_force
+
+    return force_torque_body.flatten()
+
 def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, theta=0, wall=True, T=298,
         method='EMmid', struct_file_to_load=42, skip_seconds=2, verbose=False):
     # load a numeric data file into Cfg and skip the first line
@@ -92,6 +113,7 @@ def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, 
         method = method,
         particle_diameter = hydrodynamic_diameter,
         bare_particle_diameter = bare_diameter,
+        time_step = t_save
     )
 
     print('body_radius', hydrodynamic_radius)
@@ -215,26 +237,33 @@ def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, 
     n_save  = int(t_save / dt)
     skip_timesteps = skip_seconds / dt
     skip_saves = skip_timesteps / n_save
-    num_output_rows = int(n_steps / n_save - 1 - skip_saves)
-    particles = np.full((num_output_rows, 9), np.nan)
-    print(f'particles array size, {particles.nbytes/1e9:.1f}GB')
-
-    exception = False
-
-    gmres_x0 = None
-
-    gmres_num = []
-    gmres_num_p = []
-    gmres_num_m = []
+    if output_name:
+        num_output_rows = int(n_steps / n_save - 1 - skip_saves)
+        particles = np.full((num_output_rows, 9), np.nan)
+        print(f'particles array size, {particles.nbytes/1e9:.1f}GB')
 
     gmres_guess = None
+
+    
+    # we need to let the solver calculate the forces b/c the Trap solver calcluates forces for different configurations
+    # so we don't calculate it here, but make it easy for the solver
+    force_torque_body_function = functools.partial(
+        calc_force_torque_body,
+        gravity            = gravity,
+        wall               = wall,
+        f_gravity_mag      = f_gravity_mag,
+        theta              = theta,
+        blob_radius        = blob_radius,
+        debye_length       = debye_length,
+        repulsion_strength = repulsion_strength,
+        Nbodies            = Nbodies,
+    )
 
     progress = progressbar(total=n_steps, mininterval=10)
     n = 0
     while n < n_steps:
         # we use a while not a for, because if the step gets retried we don't want n to increment
         
-        force_torque_body = np.zeros((2, 3))
         Slip = np.zeros(num_blob_coords)
 
         blob_coords = np.array(cb.multi_body_pos())
@@ -249,48 +278,48 @@ def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, 
         ### add shear
         Slip[0::3] = -1.0*blob_coords[2::3] * shear_size
 
-        ### add gravity
-        if gravity:
-            f_gravity_x = - f_gravity_mag * np.sin(theta * np.pi / 180)
-            f_gravity_z = - f_gravity_mag * np.cos(theta * np.pi / 180)
-            assert f_gravity_z <= 0
-            gravity_force = [f_gravity_x, 0, f_gravity_z]
-            force_torque_body[0, 0] += f_gravity_x
-            force_torque_body[0, 2] += f_gravity_z
-
-        ### add sterics with wall
-        if wall:
-            wall_force_temp = wall_force_blobs(blob_coords, blob_radius, debye_length, repulsion_strength)
-            wall_force = np.reshape(cb.KT_x_Lam(wall_force_temp), (2*Nbodies, 3))
-            force_torque_body += wall_force
-
         ### use the solver to get the velocities from the forces
         if method == 'EMmid':
             Lambda, U_s, gmres_guess = solvers.solver_EMmid(
-                Nbodies = Nbodies,
-                Nblobs  = len(initial_blob_coords),
-                Force   = force_torque_body.flatten(),
-                Slip    = Slip,
-                cb      = cb,
-                Tol     = Tol,
-                X_Guess = gmres_guess,
-                verbose = verbose
+                Nbodies                    = Nbodies,
+                Nblobs                     = len(initial_blob_coords),
+                force_torque_body_function = force_torque_body_function,
+                Slip                       = Slip,
+                cb                         = cb,
+                Tol                        = Tol,
+                X_Guess                    = gmres_guess,
+                verbose                    = verbose
             )
 
         elif method.startswith('EMRFD'):
             Lambda, U_s, gmres_guess = solvers.solver_EMRFD(
-                Nbodies  = Nbodies,
-                Nblobs   = len(initial_blob_coords),
-                Force    = force_torque_body.flatten(),
-                Slip     = Slip,
-                cb       = cb,
-                dt       = dt,
-                kBT      = kT,
-                Tol      = Tol,
-                U_guess  = gmres_guess,
-                Xs_start = Xs_start,
-                Qs_start = Qs_start,
-                verbose  = verbose
+                Nbodies                    = Nbodies,
+                Nblobs                     = len(initial_blob_coords),
+                force_torque_body_function = force_torque_body_function,
+                Slip                       = Slip,
+                cb                         = cb,
+                dt                         = dt,
+                kBT                        = kT,
+                Tol                        = Tol,
+                U_guess                    = gmres_guess,
+                Xs_start                   = Xs_start,
+                Qs_start                   = Qs_start,
+                verbose                    = verbose
+            )
+
+        elif method == 'Trap':
+            Lambda, U_s = solvers.solver_trap(
+                Nbodies                    = Nbodies,
+                Nblobs                     = len(initial_blob_coords),
+                force_torque_body_function = force_torque_body_function,
+                Slip                       = Slip,
+                cb                         = cb,
+                dt                         = dt,
+                kBT                        = kT,
+                Tol                        = Tol,
+                Xs_start                   = Xs_start,
+                Qs_start                   = Qs_start,
+                verbose                    = verbose,
             )
         
         else:
@@ -328,10 +357,6 @@ def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, 
             print()
             print('U_s', U_s) # rigid forces and torques
             print('position', Xs_new)
-            if wall:
-                print('force wall', wall_force)
-            if gravity:
-                print('force grav', gravity_force)
             print('change in position', Xs_new - Xs)
             raise Exception(f'particle moved more than 10um')
 
