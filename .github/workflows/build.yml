@@ -11,16 +11,11 @@ on:
       - cron:  '0 0 * * 0'
 
 jobs:
-  build:
-
+  build_linux:
     strategy:
-        matrix:
-          os: [ubuntu-latest, macos-latest]
-    steps:
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.version }}
-    runs-on: {{ matrix.os }}
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
 
     steps:
     - name: Checkout code
