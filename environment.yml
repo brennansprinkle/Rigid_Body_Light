@@ -4,6 +4,6 @@ dependencies:
   - numpy
   - pyamg
   - pybind11
-  - StochasticHydroTools::libMobility
   - matplotlib
   - numba
+  - cxx-compiler
