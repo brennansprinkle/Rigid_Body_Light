@@ -3,6 +3,7 @@ import scipy
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as pyrot
 import single_particle
+import libMobility
 
 def wall_energy_blobs(r_vectors, a, debye_length, repulsion_strength):
     """
@@ -79,15 +80,20 @@ def particle_wall_energy_cfg_avg(Cfg, Radius, a, debye_length, repulsion_strengt
 if __name__ == '__main__':
         
     Nbodies = 50
+    Nblobs_per_body = 42
     dt = 1e-2
+
+    libmobility_solver = libMobility.NBody("open", "open", "single_wall")
+    libmobility_solver.setParameters(wallHeight=0.0, Nbatch=Nbodies, NperBatch=Nblobs_per_body)
 
     data, metadata = single_particle.run(
         t_max  = 10,
         dt     = dt,
         t_save = dt,
         method = 'Trap',
-        struct_file_to_load = 42,
+        struct_file_to_load = Nblobs_per_body,
         Nbodies = Nbodies,
+        libmobility_solver = libmobility_solver
     )
 
     h_coords = data[:, 2]

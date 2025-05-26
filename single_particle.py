@@ -2,7 +2,6 @@ import time, copy, sys
 import numpy as np
 import solvers
 import scipy
-import libMobility
 
 # find c++ functions
 sys.path.append('../')
@@ -92,13 +91,17 @@ def calc_force_torque_body(gravity, wall, f_gravity_mag, theta, blob_radius, deb
 
     return force_torque_body.flatten()
 
-def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, theta=0, wall=True, T=298,
-        method='EMmid', struct_file_to_load=42, skip_seconds=2, verbose=False, Nbodies=1):
+def run(t_max, t_save, dt=1e-2, shear_size=0.0, gravity=True, theta=0, wall=True, T=298,
+        method='EMmid', struct_file_to_load=42, skip_seconds=2, verbose=False, Nbodies=1,
+        libmobility_solver=None, body_coords=None):
     
+    # parameter checking
     if Nbodies > 1:
         assert method in ['Trap']
-
-    t0 = time.time()
+    
+    if body_coords is not None:
+        assert body_coords.shape[0] == Nbodies
+        assert body_coords.shape[1] == 3
 
     hydrodynamic_diameter = 2.972 # um
     bare_diameter = 2.82 # um
@@ -139,19 +142,27 @@ def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, 
     X_0 = []
     Quat = []
 
-    Nbodies = 1
-
     default_struct_location = np.array([0, 0, 1.2]) * hydrodynamic_radius
     default_struct_orientation = np.array([1.0, 0.0, 0.0, 0.0])
-    for k in range(Nbodies):
-        # random x y  location in the range -1e6 to 1e6
-        xy_loc = np.random.rand(2)*1.0e3
-        xy_loc = 2.0*xy_loc - 1e3
-        zshift = np.random.rand()*0.4*hydrodynamic_radius
-        zshift -= 0.2*hydrodynamic_radius # why are we doing this?
-        loc = default_struct_location + np.array([xy_loc[0],xy_loc[1],zshift])
-        X_0.append(loc)
-        Quat.append(default_struct_orientation)
+
+    if Nbodies == 1:
+        X_0 = [default_struct_location]
+        Quat = [default_struct_orientation]
+
+    elif body_coords is not None:
+        X_0 = body_coords
+        Quat = [default_struct_orientation] * Nbodies
+    
+    else:
+        for k in range(Nbodies):
+            # random x y  location in the range -1e6 to 1e6
+            xy_loc = np.random.rand(2)*1.0e3
+            xy_loc = 2.0*xy_loc - 1e3
+            zshift = np.random.rand()*0.4*hydrodynamic_radius
+            zshift -= 0.2*hydrodynamic_radius # why are we doing this?
+            loc = default_struct_location + np.array([xy_loc[0],xy_loc[1],zshift])
+            X_0.append(loc)
+            Quat.append(default_struct_orientation)
 
     X_0 = np.array(X_0).flatten()
     Quat = np.array(Quat).flatten()
@@ -230,10 +241,6 @@ def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, 
     # Force = FT.flatten()
     # Slip = np.zeros(sz)
     # gamma = 1.0
-    if output_name:
-        print('saving to', output_name)
-    else:
-        print('warning: not saving data')
         
     num_rejects = 0
 
@@ -243,19 +250,16 @@ def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, 
     n_save  = int(t_save / dt)
     skip_timesteps = skip_seconds / dt
     skip_saves = skip_timesteps / n_save
-    num_output_rows = int(n_steps / n_save - 1 - skip_saves)
+    num_output_rows = Nbodies * int(n_steps / n_save - 1 - skip_saves)
     particles = np.full((num_output_rows, 9), np.nan)
     print(f'particles array size, {particles.nbytes/1e9:.1f}GB')
+    print('particles shape', particles.shape)
 
     gmres_guess = None
 
     if Nbodies > 1:
         if method == 'Trap':
-            
-            libmobility_solver = libMobility.NBody("open", "open", "single_wall")
-            libmobility_solver.setParameters(wallHeight=0.0, Nbatch=Nbodies, NperBatch=Nblobs_per_body)
-            # solver = DPStokes("periodic", "periodic", "two_walls")
-            # solver.setParameters(Lx=L, Ly=L,zmin=0.0, zmax=5*a, allowChangingBoxSize=True)
+            assert libmobility_solver is not None
 
             libmobility_solver.initialize(
                 temperature        = kT,
@@ -266,7 +270,7 @@ def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, 
 
     
     # we need to let the solver calculate the forces b/c the Trap solver calcluates forces for different configurations
-    # so we don't calculate it here, but make it easy for the solver
+    # so we don't calculate it here, but make it easy for the solver by giving it a functions with the parameters mostly already bound
     force_torque_body_function = functools.partial(
         calc_force_torque_body,
         gravity            = gravity,
@@ -368,43 +372,38 @@ def run(t_max, t_save, output_name=None, dt=1e-2, shear_size=0.0, gravity=True, 
         # evolve rigid bodies (use the velocities to update the positions and orientations)
         cb.evolve_X_Q(U_s)
         blob_coords_new = np.array(cb.multi_body_pos())
+        Qs_new, Xs_new = cb.getConfig()
+
+        if num_rejects > 100 and num_rejects > n:
+            print(f'{num_rejects} rejects, {n} successes. Stopping.')
+            break
         
-        if np.linalg.norm(blob_coords - blob_coords_new, ord=np.inf) > 4*blob_radius:
+        if dist := np.linalg.norm(blob_coords - blob_coords_new, ord=np.inf) > 4*blob_radius: # does this work when blob_coords is across multiple bodies? do we not need to specify an axis or something?
             num_rejects += 1
-            print(f'Bad Timestep!! {n}')
+            print(f'Bad timestep! ({n})')
+            cb.setConfig(Xs_start, Qs_start) # reset the positions and orientations
+            continue
+
+        if fraction_unchanged := np.sum(Xs_start == Xs_new) / Xs_start.size > 0.2:
+            num_rejects += 1
+            print(f'{fraction_unchanged*100}% of blob coords did not change')
             cb.setConfig(Xs_start, Qs_start) # reset the positions and orientations
             continue
 
         # save data
-        if output_name and n % n_save == 0 and n > skip_timesteps:
-            frame = (n - skip_timesteps) / n_save
-
-            saving_index = int((n - skip_timesteps) / n_save - 1)
-            assert saving_index >= 0
-
-            particles[saving_index, [0, 1, 2]] = Xs[[0, 1, 2]]
-            particles[saving_index, 3] = frame
-            particles[saving_index, 4] = 0 # ID always zero cause there's only one particle
-            particles[saving_index, [5, 6, 7, 8]] = Qs
-
-        # error checking
-        Qs_new, Xs_new = cb.getConfig()
-        
-        if np.max(np.abs(Xs - Xs_new)) > 10:
-            print()
-            print('U_s', U_s) # rigid forces and torques
-            print('position', Xs_new)
-            print('change in position', Xs_new - Xs)
-            raise Exception(f'particle moved more than 10um')
-
-        if gravity:
-            assert Xs_new[2] < 20, f'z = {Xs_new[2]}'
+        if n % n_save == 0 and n > skip_timesteps:
+            frame = int((n - skip_timesteps) / n_save) - 1
+            row_i = frame * Nbodies
+            assert row_i >= 0
+            
+            particles[row_i:row_i+Nbodies, [0, 1, 2]] = Xs_new.reshape((Nbodies, 3)) # Xs is [x0, y0, z0, x1, y1, z1, ...]
+            particles[row_i:row_i+Nbodies, 3] = frame
+            particles[row_i:row_i+Nbodies, 4] = np.arange(0, Nbodies) # particle ID
+            particles[row_i:row_i+Nbodies, [5, 6, 7, 8]] = Qs_new.reshape((Nbodies, 4))
 
         n += 1
         progress.update()
 
-    if output_name:
-        np.savez(output_name, particles=particles, computation_time=time.time()-t0, **metadata)
-        print('saved data to', output_name)
+    print(f'num_rejects: {num_rejects}')
     
     return particles, metadata

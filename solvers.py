@@ -305,7 +305,9 @@ def solver_trap_libmobility(Nbodies, Nblobs, force_torque_body_function, Slip, c
     end = time.time()
     #print("Time RHS: "+str(end - start)+" s")
     
+    r_vectors = np.array(cb.multi_body_pos())
     libmobility_solver.setPositions(r_vectors)
+
     def apply_Saddle_mdot(x):
         out = 0*x
         Lam = x[0:sz]
