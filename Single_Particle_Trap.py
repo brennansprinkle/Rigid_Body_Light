@@ -1,6 +1,6 @@
 import numpy as np
 import scipy
-import single_particle
+import rigidbody
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as pyrot
 
@@ -78,7 +78,7 @@ if __name__ == '__main__':
         
     dt = 1e-2
 
-    data, metadata = single_particle.run(
+    data, metadata = rigidbody.run(
         t_max  = 50, # was 2000
         dt     = dt,
         t_save = dt,

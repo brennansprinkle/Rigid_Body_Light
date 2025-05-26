@@ -3,7 +3,7 @@ import sys
 import scipy
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as pyrot
-import single_particle
+import rigidbody
 
 
 def wall_energy_blobs(r_vectors, a, debye_length, repulsion_strength):
@@ -80,7 +80,7 @@ if __name__ == '__main__':
 
     dt = 1e-2
 
-    data, metadata = single_particle.run(
+    data, metadata = rigidbody.run(
         t_max  = 50, # was 2000
         dt     = dt,
         t_save = dt,
