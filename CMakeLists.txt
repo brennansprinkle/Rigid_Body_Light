@@ -14,6 +14,10 @@ include_directories(${pybind11_INCLUDE_DIRS})
 include_directories(${Python3_INCLUDE_DIRS})
 # include_directories(${CMAKE_SOURCE_DIR}/include)
 
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+  set(CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS "${CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS} -undefined dynamic_lookup")
+endif()
+
 
 # Ensure ${Python3_SOABI} is not empty
 if(NOT Python3_SOABI)
