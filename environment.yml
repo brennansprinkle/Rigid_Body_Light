@@ -11,3 +11,4 @@ dependencies:
   - numba
   - cxx-compiler
   - eigen
+  - pytest
