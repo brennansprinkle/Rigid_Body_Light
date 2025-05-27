@@ -10,3 +10,4 @@ dependencies:
   - matplotlib
   - numba
   - cxx-compiler
+  - eigen
