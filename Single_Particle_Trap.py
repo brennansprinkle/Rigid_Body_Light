@@ -1,29 +1,12 @@
-import argparse
 import numpy as np
-import scipy.linalg as la
-import scipy.spatial as spatial
 import scipy.sparse.linalg as spla
 
-from functools import partial
-import sys
 import time
 import copy
 
-import scipy.sparse as sp
-from sksparse.cholmod import cholesky
 import pyamg
 import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation as pyrot
-
-# Find project functions
-found_functions = False
-path_to_append = './'
-sys.path.append('../')
-sys.path.append('./build/')
-
-for i in range(10):
-    path_to_append += '../'
-    sys.path.append(path_to_append)
 
 import c_rigid_obj as cbodies
 
