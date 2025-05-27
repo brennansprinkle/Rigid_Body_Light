@@ -11,7 +11,7 @@ on:
       - cron:  '0 0 * * 0'
 
 jobs:
-  build_linux:
+  build:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -31,7 +31,7 @@ jobs:
     - name: List environment
       run: |
         eval "$(micromamba shell hook --shell bash)"
-        micromamba activate gp
+        micromamba activate rigid
         micromamba list
 
     - name: Configure and compile the library
