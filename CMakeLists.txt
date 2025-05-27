@@ -23,7 +23,11 @@ endif()
 if(NOT Python3_SOABI)
   message(FATAL_ERROR "Python3_SOABI is empty. Set it to the output of 'python3-config --extension-suffix'")
 endif()
+
 add_library(c_rigid_obj.${Python3_SOABI} SHARED c_rigid_obj.cpp)
+set_target_properties(CGaussianPuff.${Python3_SOABI} PROPERTIES SUFFIX ".so") # force .so suffix for mac
+set_target_properties(CGaussianPuff.${Python3_SOABI} PROPERTIES PREFIX "") # remove the lib prefix
+
 target_link_libraries(c_rigid_obj.${Python3_SOABI} PRIVATE pybind11::pybind11 Eigen3::Eigen)
 set_target_properties(c_rigid_obj.${Python3_SOABI} PROPERTIES PREFIX "")
 target_compile_options(c_rigid_obj.${Python3_SOABI} PRIVATE -fPIC -Wall -O3)
