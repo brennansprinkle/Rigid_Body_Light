@@ -14,11 +14,22 @@ include_directories(${pybind11_INCLUDE_DIRS})
 include_directories(${Python3_INCLUDE_DIRS})
 # include_directories(${CMAKE_SOURCE_DIR}/include)
 
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+  set(CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS "${CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS} -undefined dynamic_lookup")
+endif()
+
 
 # Ensure ${Python3_SOABI} is not empty
 if(NOT Python3_SOABI)
   message(FATAL_ERROR "Python3_SOABI is empty. Set it to the output of 'python3-config --extension-suffix'")
 endif()
-add_library(c_rigid_obj SHARED c_rigid_obj.cpp)
-target_link_libraries(c_rigid_obj PRIVATE pybind11::pybind11 Eigen3::Eigen)
-set_target_properties(c_rigid_obj PROPERTIES PREFIX "")
+
+add_library(c_rigid_obj.${Python3_SOABI} SHARED c_rigid_obj.cpp)
+set_target_properties(c_rigid_obj.${Python3_SOABI} PROPERTIES SUFFIX ".so") # force .so suffix for mac
+set_target_properties(c_rigid_obj.${Python3_SOABI} PROPERTIES PREFIX "") # remove the lib prefix
+
+target_link_libraries(c_rigid_obj.${Python3_SOABI} PRIVATE pybind11::pybind11 Eigen3::Eigen)
+set_target_properties(c_rigid_obj.${Python3_SOABI} PROPERTIES PREFIX "")
+target_compile_options(c_rigid_obj.${Python3_SOABI} PRIVATE -fPIC -Wall -O3)
+
+install(TARGETS c_rigid_obj.${Python3_SOABI} DESTINATION ${Python3_SITEARCH})

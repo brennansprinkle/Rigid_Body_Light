@@ -10,3 +10,6 @@ dependencies:
   - StochasticHydroTools::libMobility
   - matplotlib
   - numba
+  - cxx-compiler
+  - eigen
+  - pytest
