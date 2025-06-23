@@ -35,10 +35,6 @@ class CMakeBuild(build_ext):
             "-DCMAKE_BUILD_TYPE=" + ("Debug" if self.debug else "Release"),
         ]
 
-        # Set CXX compiler based on platform. This assumes that the compiler comes from cxx-compiler on conda-forge
-        if sys.platform.startswith("darwin"):
-            os.environ["CXX"] = os.environ["CONDA_PREFIX"] + "/bin/clang++"
-
         build_args = ["--config", "Release"]
 
         if not os.path.exists(self.build_temp):
