@@ -3,6 +3,8 @@ project(c_rigid_obj)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/" "$ENV{CONDA_PREFIX}/share/cmake/Modules")
 set(CMAKE_BUILD_TYPE Release)
 add_compile_definitions(PUBLIC MAXLOGLEVEL=3)
+
+enable_language(CXX)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
 
