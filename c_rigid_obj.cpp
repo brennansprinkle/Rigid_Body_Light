@@ -17,7 +17,6 @@
 #include <random>
 #include <vector>
 #include <iostream>
-#include <algorithm>
 #include "sys/time.h"
 
 
@@ -199,9 +198,6 @@ class CManyBodies{
   // rigid coordinates
   bool cfg_set = false;
   int N_bod;
-  // Solver config
-  std::vector<Quat> Qs;
-  std::vector<Vector> Xs;
   // Base config
   std::vector<Quat> Q_n;
   std::vector<Vector> X_n;
@@ -253,8 +249,6 @@ public:
   void setConfig(RefVector& X_0, RefVector& Q){
       N_bod = X_0.size()/3;
       if(!cfg_set){
-      Qs.reserve(4*N_bod);
-      Xs.reserve(3*N_bod);
       Q_n.reserve(4*N_bod);
       X_n.reserve(3*N_bod);
       }
@@ -269,11 +263,9 @@ public:
         Q_j.w() = Q(4*j+0);
         Q_j.normalize();
         if(!cfg_set){
-          Qs.push_back(Q_j);
           Q_n.push_back(Q_j);
         }
         else{
-          Qs[j] = Q_j;
           Q_n[j] = Q_j;
         }
         // set disp
@@ -281,11 +273,9 @@ public:
         X_0_j(1) = X_0(3*j+1);
         X_0_j(2) = X_0(3*j+2);
         if(!cfg_set){
-          Xs.push_back(X_0_j);
           X_n.push_back(X_0_j);
         }
         else{
-          Xs[j] = X_0_j;
           X_n[j] = X_0_j;
         }
       }
@@ -299,14 +289,14 @@ public:
       Quat Q_j;
       Vector X_0_j(3);
       for(int j = 0; j < N_bod; ++j){
-        Q_j = Qs[j];
+        Q_j = Q_n[j];
         // set quaternion
         Qout(4*j+1) = Q_j.x();
         Qout(4*j+2) = Q_j.y();
         Qout(4*j+3) = Q_j.z();
         Qout(4*j+0) = Q_j.w();
         // set disp
-        X_0_j = Xs[j];
+        X_0_j = X_n[j];
         Xout(3*j+0) = X_0_j(0);
         Xout(3*j+1) = X_0_j(1);
         Xout(3*j+2) = X_0_j(2);
@@ -364,8 +354,7 @@ public:
     if(!cfg_set){
         std::cout << "ERROR CONFIG NOT INITIALIZED YET!!\n";
     }
-    return r_vecs_from_cfg(Xs, Qs);
-
+    return r_vecs_from_cfg(X_n, Q_n);
   }
 
   
@@ -374,9 +363,6 @@ public:
     KTKinv.setZero();
     int N = N_blb;
     Matrix3 Ainv = (1.0/(1.0 * N)) * Matrix::Identity(3,3);
-    Matrix3 B;
-    B.setZero();
-    Matrix3 C = B.transpose();
     
     Matrix3 Rot = Q_j.toRotationMatrix();
     Matrix3 D = (sumr2_cfg) * Matrix::Identity(3,3) - Rot*MOI_cfg*Rot.transpose();   
@@ -482,7 +468,7 @@ public:
         std::cout << "ERROR CONFIG NOT INITIALIZED YET!!\n";
     }  
       
-    std::tie(K,Kinv) = Make_K_Kinv(Xs, Qs);
+    std::tie(K,Kinv) = Make_K_Kinv(X_n, Q_n);
     KT = K.transpose();
     
     
@@ -593,8 +579,7 @@ public:
     //double t, elapsed;
     
     for (int i = 0; i < N_bod; ++i) {
-        
-        r_vectors = single_body_pos(Xs[i], Qs[i]);
+        r_vectors = single_body_pos(X_n[i], Q_n[i]);
         //t = timeNow();
         Mob = rotne_prager_tensor(r_vectors); //Dense_M(r_vectors); //
         //elapsed = timeNow() - t;
@@ -1039,7 +1024,6 @@ public:
         
         double delta = 1.0e-3;
         
-        int sz = 3*N_bod*N_blb;
        // Make random vector
         
         std::vector<Quat> Qp;
@@ -1067,7 +1051,6 @@ public:
         
         double delta = 1.0e-3;
         
-        int sz = 3*N_bod*N_blb;
        // Make random vector
         
         std::vector<Quat> Qp;
@@ -1101,8 +1084,6 @@ public:
         
         Q_n = Qnext;
         X_n = Xnext;
-        Qs = Qnext;
-        Xs = Xnext;
         
         set_K_mats();
         PC_mat_Set = false;
@@ -1118,9 +1099,7 @@ public:
         
         Q_n = Qnext;
         X_n = Xnext;
-        Qs = Qnext;
-        Xs = Xnext;
-        
+
         set_K_mats();
         PC_mat_Set = true;
     }
@@ -1198,11 +1177,9 @@ public:
             
             std::tie(Qhalf,Xhalf) = update_X_Q(UOm_half);
             r_vecs =  r_vecs_from_cfg(Xhalf,Qhalf);
-                
             
             
-            Qs = Qhalf;
-            Xs = Xhalf;
+            
             set_K_mats();
             
             // Make RHS for final solve
