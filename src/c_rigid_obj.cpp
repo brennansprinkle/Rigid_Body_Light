@@ -228,7 +228,7 @@ public:
     this->Lp = Lp;
     removeMean(Cfg);
     
-    std::cout << "New mean of Ref Config canged to: " << (Cfg.colwise().mean()).transpose() << "\n";
+    std::cout << "New mean of Ref Config changed to: " << (Cfg.colwise().mean()).transpose() << "\n";
     
     this->Ref_Cfg = Cfg;
     this->N_blb = Ref_Cfg.rows();
@@ -302,7 +302,7 @@ public:
         Xout(3*j+2) = X_0_j(2);
       }
       
-      return std::make_tuple(Qout,Xout);
+      return std::make_tuple(Xout,Qout);
   }
   
   

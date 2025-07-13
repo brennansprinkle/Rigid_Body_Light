@@ -8,6 +8,7 @@ enable_language(CXX)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 17)
 
+set(SOURCES src/c_rigid_obj.cpp)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
 find_package(pybind11 REQUIRED CONFIG)
@@ -26,7 +27,7 @@ if(NOT Python3_SOABI)
   message(FATAL_ERROR "Python3_SOABI is empty. Set it to the output of 'python3-config --extension-suffix'")
 endif()
 
-add_library(c_rigid_obj.${Python3_SOABI} SHARED c_rigid_obj.cpp)
+add_library(c_rigid_obj.${Python3_SOABI} SHARED ${SOURCES})
 set_target_properties(c_rigid_obj.${Python3_SOABI} PROPERTIES SUFFIX ".so") # force .so suffix for mac
 set_target_properties(c_rigid_obj.${Python3_SOABI} PROPERTIES PREFIX "") # remove the lib prefix
 
@@ -34,4 +35,6 @@ target_link_libraries(c_rigid_obj.${Python3_SOABI} PRIVATE pybind11::pybind11 Ei
 set_target_properties(c_rigid_obj.${Python3_SOABI} PROPERTIES PREFIX "")
 target_compile_options(c_rigid_obj.${Python3_SOABI} PRIVATE -fPIC -Wall -O3)
 
-install(TARGETS c_rigid_obj.${Python3_SOABI} DESTINATION ${Python3_SITEARCH})
+install(TARGETS c_rigid_obj.${Python3_SOABI} DESTINATION ${Python3_SITEARCH}/Rigid)
+file(GLOB PYTHON_SOURCES src/*.py)
+install(FILES ${PYTHON_SOURCES} DESTINATION ${Python3_SITEARCH}/Rigid)
