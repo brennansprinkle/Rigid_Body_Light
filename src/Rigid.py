@@ -1,4 +1,5 @@
 from Rigid import c_rigid_obj as crigid
+import numpy as np
 
 
 class RigidBody:
@@ -22,8 +23,20 @@ class RigidBody:
         self.cb.setConfig(X, Q)
 
     def __check_and_set_shapes(self, X, Q):
+        x_size = np.prod(np.shape(X))
+        q_size = np.prod(np.shape(Q))
+
+        if x_size % 3 != 0:
+            raise RuntimeError("X must have total length 3N")
+        if q_size % 4 != 0:
+            raise RuntimeError("Q must have total length 4N")
+
+        nx = x_size // 3
+        nq = q_size // 4
+
+        if nx != nq:
+            raise RuntimeError("X and Q must have the same number of bodies")
+        
+        self.N_bodies = nx
         self.X_shape = X.shape
         self.Q_shape = Q.shape
-
-        if self.X_shape[0] != self.Q_shape[0]:
-            raise RuntimeError("X and Q must have the same number of bodies")

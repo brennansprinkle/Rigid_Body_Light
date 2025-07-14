@@ -12,12 +12,9 @@ def test_config():
     cb = RigidBody()
     cb.set_config(X_0, Q_0)
 
-    print(Q_0, "before conversion")
     Q_0 = Rotation.from_quat(Q_0).as_quat()
-    print(Q_0, "after conversion")
 
     X, Q = cb.get_config()
-    print(Q, "after get_config")
     print(Q - Q_0)
     assert np.allclose(X, X_0)
     assert np.allclose(Q, Q_0)
