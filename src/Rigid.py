@@ -1,4 +1,4 @@
-from Rigid import c_rigid_obj as crigid
+from Rigid import c_rigid as crigid
 import numpy as np
 
 
@@ -36,7 +36,7 @@ class RigidBody:
 
         if nx != nq:
             raise RuntimeError("X and Q must have the same number of bodies")
-        
+
         self.N_bodies = nx
         self.X_shape = X.shape
         self.Q_shape = Q.shape

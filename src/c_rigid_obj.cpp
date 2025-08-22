@@ -4,12 +4,11 @@
 //################################################################################
 //################# Interfacing Eigen and Python without copying data ############
 //################################################################################
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
 #include <Eigen/Core>
 #include <Eigen/Dense>
-#include <pybind11/numpy.h>
-#include <pybind11/eigen.h>
+#include <nanobind/nanobind.h>
+#include <nanobind/eigen/dense.h>
+#include <nanobind/ndarray.h>
 #include <cmath>
 #include <omp.h>
 //#include <lapacke.h>
@@ -17,9 +16,7 @@
 #include <random>
 #include <vector>
 #include <iostream>
-#include "sys/time.h"
-
-
+#include <sys/time.h>
 #include <Eigen/SparseCholesky>
 
 
@@ -246,7 +243,7 @@ public:
   }
   
   
-  void setConfig(RefVector& X_0, RefVector& Q){
+  void setConfig(RefVector X_0, RefVector Q){
       N_bod = X_0.size()/3;
       if(!cfg_set){
       Q_n.reserve(4*N_bod);
@@ -1214,47 +1211,57 @@ private:
 
 };
 
-
-using namespace pybind11::literals;
-namespace py = pybind11;
-//TODO: Fill python documentation here
-PYBIND11_MODULE(c_rigid_obj, m) {
+namespace nb = nanobind;
+NB_MODULE(c_rigid, m) {
     m.doc() = "Rigid code";
-    py::class_<CManyBodies>(m, "CManyBodies")
-        .def(py::init())
-        .def("setParameters", &CManyBodies::setParameters,
-             "Set parameters for the module")
-        .def("setBlkPC", &CManyBodies::setBlkPC, "set PC type")
-        .def("setWallPC", &CManyBodies::setWallPC, "use wall corrections")
-        .def("multi_body_pos", &CManyBodies::multi_body_pos,
-             "Get the blob positions")
+
+    nb::class_<CManyBodies>(m, "CManyBodies")
+        .def(nb::init<>())
         .def("setConfig", &CManyBodies::setConfig,
              "Set the X and Q vectors for the current position")
         .def("getConfig", &CManyBodies::getConfig,
-             "get the X and Q vectors for the current position")
-        .def("set_K_mats", &CManyBodies::set_K_mats,
-             "Set the K,K^T,K^-1 matrices for the module")
-        .def("K_x_U", &CManyBodies::K_x_U, "Multiply K by U")
-        .def("Kinv_x_V", &CManyBodies::Kinv_x_V, "Multiply Kinv by V")
-        .def("KTinv_x_F", &CManyBodies::KTinv_x_F, "Multiply KTinv by F")
-        .def("KT_x_Lam", &CManyBodies::KT_x_Lam, "Multiply K^T by Lambda")
-        .def("apply_PC", &CManyBodies::apply_PC<RefVector &>, "apply for PC")
-        .def("apply_Saddle", &CManyBodies::apply_Saddle<RefVector &>,
-             "apply for [M, -K;-K^T, 0]")
-        .def("test_PC", &CManyBodies::test_PC<RefVector &>, "test_PC")
-        .def("Test_Mhalf", &CManyBodies::Test_Mhalf, "Test_Mhalf")
-        .def("apply_M", &CManyBodies::apply_M<RefVector &>, "apply M")
-        .def("M_RFD_from_U", &CManyBodies::M_RFD_from_U<RefVector &>, "M RFD")
-        .def("KT_RFD_from_U", &CManyBodies::KT_RFD_from_U<RefVector &>,
-             "KT RFD")
-        .def("update_X_Q_out", &CManyBodies::update_X_Q_out, "update_X_Q_out")
-        .def("KTinv_RFD", &CManyBodies::KTinv_RFD, "KTinv_RFD")
-        .def("M_RFD", &CManyBodies::M_RFD, "M_RFD")
-        .def("M_RFD_cfgs", &CManyBodies::M_RFD_cfgs<RefVector &>, "M_RFD_cfgs")
-        .def("M_half_W", &CManyBodies::M_half_W, "M_half_W")
-        .def("RHS_and_Midpoint", &CManyBodies::RHS_and_Midpoint,
-             "RHS_and_Midpoint")
-        .def("evolve_X_Q", &CManyBodies::evolve_X_Q, "evolve_X_Q")
-        .def("evolve_X_Q_RFD", &CManyBodies::evolve_X_Q_RFD, "evolve_X_Q_RFD")
-        .def("get_K_Kinv", &CManyBodies::get_K_Kinv, "get_K_Kinv");
+             "get the X and Q vectors for the current position");
 }
+
+
+// NB_MODULE(c_rigid, m) {
+//     m.doc() = "Rigid code";
+
+//     nb::class_<CManyBodies>(m, "CManyBodies")
+//         .def(nb::init<>())
+//         .def("setParameters", &CManyBodies::setParameters,
+//              "Set parameters for the module")
+//         .def("setBlkPC", &CManyBodies::setBlkPC, "set PC type")
+//         .def("setWallPC", &CManyBodies::setWallPC, "use wall corrections")
+//         .def("multi_body_pos", &CManyBodies::multi_body_pos,
+//              "Get the blob positions")
+//         .def("setConfig", &CManyBodies::setConfig,
+//              "Set the X and Q vectors for the current position")
+//         .def("getConfig", &CManyBodies::getConfig,
+//              "get the X and Q vectors for the current position");
+//         .def("set_K_mats", &CManyBodies::set_K_mats,
+//              "Set the K,K^T,K^-1 matrices for the module")
+//         .def("K_x_U", &CManyBodies::K_x_U, "Multiply K by U")
+//         .def("Kinv_x_V", &CManyBodies::Kinv_x_V, "Multiply Kinv by V")
+//         .def("KTinv_x_F", &CManyBodies::KTinv_x_F, "Multiply KTinv by F")
+//         .def("KT_x_Lam", &CManyBodies::KT_x_Lam, "Multiply K^T by Lambda")
+//         .def("apply_PC", &CManyBodies::apply_PC<RefVector &>, "apply for PC")
+//         .def("apply_Saddle", &CManyBodies::apply_Saddle<RefVector &>,
+//              "apply for [M, -K;-K^T, 0]")
+//         .def("test_PC", &CManyBodies::test_PC<RefVector &>, "test_PC")
+//         .def("Test_Mhalf", &CManyBodies::Test_Mhalf, "Test_Mhalf")
+//         .def("apply_M", &CManyBodies::apply_M<RefVector &>, "apply M")
+//         .def("M_RFD_from_U", &CManyBodies::M_RFD_from_U<RefVector &>, "M RFD")
+//         .def("KT_RFD_from_U", &CManyBodies::KT_RFD_from_U<RefVector &>,
+//              "KT RFD")
+//         .def("update_X_Q_out", &CManyBodies::update_X_Q_out, "update_X_Q_out")
+//         .def("KTinv_RFD", &CManyBodies::KTinv_RFD, "KTinv_RFD")
+//         .def("M_RFD", &CManyBodies::M_RFD, "M_RFD")
+//         .def("M_RFD_cfgs", &CManyBodies::M_RFD_cfgs<RefVector &>, "M_RFD_cfgs")
+//         .def("M_half_W", &CManyBodies::M_half_W, "M_half_W")
+//         .def("RHS_and_Midpoint", &CManyBodies::RHS_and_Midpoint,
+//              "RHS_and_Midpoint")
+//         .def("evolve_X_Q", &CManyBodies::evolve_X_Q, "evolve_X_Q")
+//         .def("evolve_X_Q_RFD", &CManyBodies::evolve_X_Q_RFD, "evolve_X_Q_RFD")
+//         .def("get_K_Kinv", &CManyBodies::get_K_Kinv, "get_K_Kinv");
+// }

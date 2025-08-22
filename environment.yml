@@ -6,7 +6,7 @@ dependencies:
   - scipy
   - numpy
   - pyamg
-  - pybind11
+  - nanobind
   - matplotlib
   - numba
   - cxx-compiler
