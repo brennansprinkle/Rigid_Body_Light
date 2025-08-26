@@ -6,8 +6,14 @@ class RigidBody:
     X_shape = None
     Q_shape = None
 
-    def __init__(self):
+    def __init__(self, rigid_config, X, Q, a, eta, dt, wall_PC=False, block_PC=False):
         self.cb = crigid.CManyBodies()
+        kbt = 1.0  # TODO temp, do we need kbt in c_rigid at all?
+        self.cb.setParameters(a, dt, kbt, eta, rigid_config)
+        self.cb.setBlkPC(block_PC)
+        self.cb.setWallPC(wall_PC)
+
+        self.set_config(X, Q)
 
     def get_config(self):
         X, Q = self.cb.getConfig()
@@ -36,7 +42,7 @@ class RigidBody:
 
         if nx != nq:
             raise RuntimeError("X and Q must have the same number of bodies")
-        
+
         self.N_bodies = nx
         self.X_shape = X.shape
         self.Q_shape = Q.shape
