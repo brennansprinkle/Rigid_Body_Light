@@ -15,3 +15,10 @@ def create_solver(rigid_config, X, Q):
     return RigidBody(
         rigid_config, X, Q, a=1.0, eta=1.0, dt=1.0, wall_PC=False, block_PC=False
     )
+
+
+def create_random_positions(N):
+    X = np.random.randn(N, 3)
+    # Q = np.repeat(np.array([[1.0, 0.0, 0.0, 0.0]]), N, axis=0)
+    Q = np.random.randn(N, 4)
+    return X, Q

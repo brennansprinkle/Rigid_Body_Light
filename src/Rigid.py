@@ -28,6 +28,11 @@ class RigidBody:
         Q = Q.flatten()
         self.cb.setConfig(X, Q)
 
+    def get_blob_positions(self):
+        # TODO can we avoid casting here by changing the C++ code?
+        shape = (-1, 3) if len(self.X_shape) == 2 else (-1)
+        return np.array(self.cb.multi_body_pos()).reshape(shape)
+
     def __check_and_set_shapes(self, X, Q):
         x_size = np.prod(np.shape(X))
         q_size = np.prod(np.shape(Q))
