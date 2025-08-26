@@ -175,7 +175,6 @@ void mobilityUFSingleWallCorrection(real rx, real ry, real rz, real &Mxx,
 
 class CManyBodies {
   real a, dt, kBT, eta;
-  Vector Lp;
 
   // Solver parameters
   bool PC_wall = false; // use wall corrections in PC or not
@@ -203,30 +202,28 @@ class CManyBodies {
 public:
   void removeMean(Matrix &Cfg) {
     Vector mean = Cfg.colwise().mean();
-    std::cout << "Old mean: " << mean.transpose() << "\n";
+    // std::cout << "Old mean: " << mean.transpose() << "\n";
     for (int i = 0; i < Cfg.rows(); ++i) {
       Cfg.row(i) = Cfg.row(i) - mean.transpose();
     }
   }
 
-  void setParameters(int numParts, real a, real dt, real kBT, real eta,
-                     Vector Lp, Matrix &Cfg) {
+  void setParameters(real a, real dt, real kBT, real eta, Matrix &Cfg) {
     // TODO: Put the list of parameters into a structure
     this->a = a;
     this->dt = dt;
     this->kBT = kBT;
     this->eta = eta;
-    this->Lp = Lp;
     removeMean(Cfg);
 
-    std::cout << "New mean of Ref Config changed to: "
-              << (Cfg.colwise().mean()).transpose() << "\n";
+    // std::cout << "New mean of Ref Config changed to: "
+    // << (Cfg.colwise().mean()).transpose() << "\n";
 
     this->Ref_Cfg = Cfg;
     this->N_blb = Ref_Cfg.rows();
     this->parametersSet = true;
 
-    this->M_scale = 1.0; //(6.0*M_PI*eta*a); //(6.0*M_PI*eta*a);
+    this->M_scale = 1.0;
   }
 
   void setBlkPC(bool PCtype) { block_diag_PC = PCtype; }
