@@ -56,6 +56,18 @@ class RigidBody:
         shape = (-1, 3) if len(self.X_shape) == 2 else (-1)
         return np.array(result).reshape(shape)
 
+    def K_dot(self, U_vec):
+        if U_vec.size != 6 * self.N_bodies:
+            raise RuntimeError(
+                "U must have total size 6*N_bodies = "
+                + str(6 * self.N_bodies)
+                + ". U_vec shape: "
+                + str(U_vec.shape)
+            )
+        result = self.cb.K_x_U(U_vec)
+        shape = (-1, 3) if len(self.X_shape) == 2 else (-1)
+        return np.array(result).reshape(shape)
+
     def __check_and_set_shapes(self, X, Q):
         x_size = np.prod(np.shape(X))
         q_size = np.prod(np.shape(Q))

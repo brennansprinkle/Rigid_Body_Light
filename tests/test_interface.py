@@ -76,6 +76,24 @@ def test_blob_positions():
     assert np.allclose(pos, ref_pos)
 
 
+def test_K_dot():
+    N_rigid = 3
+    X, Q = utils.create_random_positions(N_rigid)
+    _, config = utils.load_config(struct_shell_12)
+    cb = utils.create_solver(rigid_config=config, X=X, Q=Q)
+    blobs_per_body = config.shape[0]
+
+    U_bad_size = np.random.randn(6 * N_rigid - 3)
+    with pytest.raises(RuntimeError):
+        cb.K_dot(U_bad_size)
+
+    U_vec = np.random.randn(6 * N_rigid)
+    result = cb.K_dot(U_vec)
+    shape = (N_rigid * blobs_per_body, 3)
+    assert result.shape == shape
+    assert np.linalg.norm(result) > 0.0
+
+
 def test_KT_dot():
     N_rigid = 3
     X, Q = utils.create_random_positions(N_rigid)
@@ -89,6 +107,6 @@ def test_KT_dot():
 
     lambda_vec = np.random.randn(3 * blobs_per_body * N_rigid)
     result = cb.KT_dot(lambda_vec)
-    shape = (2 * N_rigid, 3) if len(X.shape) == 2 else (-1)
+    shape = (2 * N_rigid, 3)
     assert result.shape == shape
     assert np.linalg.norm(result) > 0.0
