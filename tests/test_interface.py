@@ -110,3 +110,24 @@ def test_KT_dot():
     shape = (2 * N_rigid, 3)
     assert result.shape == shape
     assert np.linalg.norm(result) > 0.0
+
+
+# TODO is (True, True) to use both PCs valid?
+@pytest.mark.parametrize(
+    ("block_PC", "wall_PC"),
+    ((False, False), (True, False), (False, True), (True, True)),
+)
+def test_apply_PC(block_PC, wall_PC):
+    N_rigid = 3
+    X, Q = utils.create_random_positions(N_rigid)
+    _, config = utils.load_config(struct_shell_12)
+    cb = utils.create_solver(
+        rigid_config=config, X=X, Q=Q, block_PC=block_PC, wall_PC=wall_PC
+    )
+    blobs_per_body = config.shape[0]
+
+    lambda_vec = np.random.randn(3 * blobs_per_body * N_rigid)
+    U = np.random.randn(6 * N_rigid)
+    PC = cb.apply_PC(lambda_vec, U)
+
+    assert np.linalg.norm(PC) > 0.0

@@ -666,13 +666,13 @@ public:
   
   
   SparseM PC_invM(){
-      std::cout << "Making PC mats\n";
+      // std::cout << "Making PC mats\n";
       if(!block_diag_PC){
         std::vector<real> r_vectors = multi_body_pos();
         return diag_invM(r_vectors);
       }
       else{
-        std::cout << "using Block diag PC\n";
+        // std::cout << "using Block diag PC\n";
         return Block_diag_invM();   
       }  
   }

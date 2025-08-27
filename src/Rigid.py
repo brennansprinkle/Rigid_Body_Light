@@ -68,6 +68,10 @@ class RigidBody:
         shape = (-1, 3) if len(self.X_shape) == 2 else (-1)
         return np.array(result).reshape(shape)
 
+    def apply_PC(self, lambda_vec, U_vec):
+        in_vec = np.concatenate((lambda_vec, U_vec))
+        return self.cb.apply_PC(in_vec)
+
     def __check_and_set_shapes(self, X, Q):
         x_size = np.prod(np.shape(X))
         q_size = np.prod(np.shape(Q))
