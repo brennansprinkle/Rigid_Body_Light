@@ -4,7 +4,7 @@ from Rigid import RigidBody
 from scipy.spatial.transform import Rotation
 import utils
 
-struct_shell_12 = "structures/shell_N_12_Rg_0_7921_Rh_1.vertex"
+struct_shell_12 = "../structures/shell_N_12_Rg_0_7921_Rh_1.vertex"
 
 
 def test_create():
