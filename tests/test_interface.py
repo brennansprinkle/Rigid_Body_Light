@@ -3,9 +3,10 @@ import pytest
 from Rigid import RigidBody
 from scipy.spatial.transform import Rotation
 import utils
-import scipy
+import os
 
-struct_shell_12 = "../structures/shell_N_12_Rg_0_7921_Rh_1.vertex"
+struct_dir = os.path.dirname(os.path.abspath(__file__)) + "/../structures/"
+struct_shell_12 = struct_dir + "shell_N_12_Rg_0_7921_Rh_1.vertex"
 
 
 def test_create():

@@ -1,7 +1,9 @@
 import numpy as np
 from Rigid import RigidBody
+import os
 
-struct_shell_12 = "../structures/shell_N_12_Rg_0_7921_Rh_1.vertex"
+struct_dir = os.path.dirname(os.path.abspath(__file__)) + "/../structures/"
+struct_shell_12 = struct_dir + "shell_N_12_Rg_0_7921_Rh_1.vertex"
 
 
 def load_config(file_name):
