@@ -6,59 +6,18 @@
 //################################################################################
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-#include <Eigen/Core>
-#include <Eigen/Dense>
 #include <pybind11/numpy.h>
 #include <pybind11/eigen.h>
 #include <cmath>
 #include <omp.h>
-//#include <lapacke.h>
 #include <chrono>
 #include <random>
 #include <vector>
 #include <iostream>
-#include "sys/time.h"
-
-
+#include <sys/time.h>
 #include <Eigen/SparseCholesky>
 
-
-
-
-
-typedef double real;
-
-
-// Double Typedefs
-typedef Eigen::VectorXd Vector;
-typedef Eigen::Ref<Vector> RefVector;
-typedef Eigen::Ref<const Vector> CstRefVector;
-typedef Eigen::MatrixXd Matrix;
-typedef Eigen::Ref<Matrix, 0, Eigen::Stride<Eigen::Dynamic, Eigen::Dynamic>> RefMatrix;
-
-typedef Eigen::Triplet<double> Trip;
-typedef Eigen::SparseMatrix<double> SparseM;
-typedef Eigen::DiagonalMatrix<double, Eigen::Dynamic> DiagM;
-
-typedef Eigen::Triplet<double> Trip_d;
-typedef Eigen::SparseMatrix<double> SparseMd;
-
-// Rigid types
-typedef Eigen::Quaterniond Quat;
-typedef Eigen::Matrix3d Matrix3;
-
-// Float typedefs
-/*
-typedef Eigen::VectorXf Vector;
-typedef Eigen::Ref<Vector> RefVector;
-typedef Eigen::Ref<const Vector> CstRefVector;
-typedef Eigen::MatrixXf Matrix;
-typedef Eigen::Ref<Matrix, 0, Eigen::Stride<Eigen::Dynamic, Eigen::Dynamic>> RefMatrix;
-*/
-typedef Eigen::VectorXi IVector;
-typedef Eigen::Ref<IVector> IRefVector;
-typedef Eigen::Ref<const IVector> CstIRefVector;
-
+#include "eigen_defines.h"
 
 struct timeval tv;
 struct timezone tz;
