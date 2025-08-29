@@ -8,6 +8,7 @@
 // ################################################################################
 #include <Eigen/Core>
 #include <Eigen/Dense>
+#include <Eigen/src/Core/Matrix.h>
 #include <cmath>
 #include <nanobind/eigen/dense.h>
 #include <nanobind/nanobind.h>
@@ -200,7 +201,7 @@ public:
 
   void setWallPC(bool Wall) { PC_wall = Wall; }
 
-  void setConfig(RefVector X_0, RefVector Q) {
+  template <typename RefVecType> void setConfig(RefVecType X_0, RefVecType Q) {
     N_bod = X_0.size() / 3;
     if (!cfg_set) {
       Q_n.reserve(4 * N_bod);
@@ -1097,13 +1098,25 @@ public:
 private:
 };
 
+template <typename VecType> void bind_setConfig(nb::class_<CManyBodies> &cls) {
+  cls.def(
+      "setConfig", // TODO I think this needs to use an eigen::map to avoid copies
+      [](CManyBodies &self, VecType X, VecType Q) { self.setConfig(X, Q); },
+      "Set the X and Q vectors for the current position");
+}
+
 NB_MODULE(c_rigid, m) {
   m.doc() = "Rigid code";
 
-  nb::class_<CManyBodies>(m, "CManyBodies")
-      .def(nb::init<>())
-      .def("setConfig", &CManyBodies::setConfig,
-           "Set the X and Q vectors for the current position")
+  nb::class_<CManyBodies> cls(m, "CManyBodies");
+
+  cls.def(nb::init<>())
+      // .def(
+      //     "setConfig",
+      //     [](CManyBodies &self, Vector X, Vector Q) {
+      //       self.setConfig(X, Q);
+      //     },
+      //     "Set the X and Q vectors for the current position")
       .def("getConfig", &CManyBodies::getConfig,
            "get the X and Q vectors for the current position")
       .def("setParameters", &CManyBodies::setParameters,
@@ -1117,6 +1130,10 @@ NB_MODULE(c_rigid, m) {
       .def("multi_body_pos", &CManyBodies::multi_body_pos,
            "Get the blob positions")
       .def("apply_PC", &CManyBodies::apply_PC<Vector>, "apply for PC");
+  typedef Eigen::Ref<const Eigen::VectorXd> RefVectorXd;
+  typedef Eigen::Ref<const Eigen::VectorXf> RefVectorXf;
+  bind_setConfig<RefVectorXd>(cls);
+  bind_setConfig<RefVectorXf>(cls);
 }
 
 // NB_MODULE(c_rigid, m) {
