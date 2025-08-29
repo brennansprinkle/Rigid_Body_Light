@@ -1,24 +1,25 @@
-//################################################################################
-//############### Basic C++ - Python bindings ####################################
-//################################################################################
-//################################################################################
-//################# Interfacing Eigen and Python without copying data ############
-//################################################################################
+// ################################################################################
+// ############### Basic C++ - Python bindings
+// ####################################
+// ################################################################################
+// ################################################################################
+// ################# Interfacing Eigen and Python without copying data
+// ############
+// ################################################################################
 #include <Eigen/Core>
 #include <Eigen/Dense>
-#include <nanobind/nanobind.h>
+#include <cmath>
 #include <nanobind/eigen/dense.h>
+#include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 #include <nanobind/stl/vector.h>
-#include <cmath>
 #include <omp.h>
-//#include <lapacke.h>
+// #include <lapacke.h>
 #include <chrono>
+#include <iostream>
 #include <random>
 #include <sys/time.h>
 #include <vector>
-#include <iostream>
-
 
 #include "eigen_defines.h"
 
@@ -1097,27 +1098,26 @@ private:
 };
 
 NB_MODULE(c_rigid, m) {
-    m.doc() = "Rigid code";
+  m.doc() = "Rigid code";
 
-    nb::class_<CManyBodies>(m, "CManyBodies")
-        .def(nb::init<>())
-        .def("setConfig", &CManyBodies::setConfig,
-             "Set the X and Q vectors for the current position")
-        .def("getConfig", &CManyBodies::getConfig,
-             "get the X and Q vectors for the current position")
-        .def("setParameters", &CManyBodies::setParameters,
-             "Set parameters for the module")
-        .def("setBlkPC", &CManyBodies::setBlkPC, "set PC type")
-        .def("setWallPC", &CManyBodies::setWallPC, "use wall corrections")
-        .def("set_K_mats", &CManyBodies::set_K_mats,
-             "Set the K,K^T,K^-1 matrices for the module")
-        .def("K_x_U", &CManyBodies::K_x_U, "Multiply K by U")
-        .def("KT_x_Lam", &CManyBodies::KT_x_Lam, "Multiply K^T by Lambda")
-        .def("multi_body_pos", &CManyBodies::multi_body_pos,
-             "Get the blob positions")
-        .def("apply_PC", &CManyBodies::apply_PC<Vector>, "apply for PC");
+  nb::class_<CManyBodies>(m, "CManyBodies")
+      .def(nb::init<>())
+      .def("setConfig", &CManyBodies::setConfig,
+           "Set the X and Q vectors for the current position")
+      .def("getConfig", &CManyBodies::getConfig,
+           "get the X and Q vectors for the current position")
+      .def("setParameters", &CManyBodies::setParameters,
+           "Set parameters for the module")
+      .def("setBlkPC", &CManyBodies::setBlkPC, "set PC type")
+      .def("setWallPC", &CManyBodies::setWallPC, "use wall corrections")
+      .def("set_K_mats", &CManyBodies::set_K_mats,
+           "Set the K,K^T,K^-1 matrices for the module")
+      .def("K_x_U", &CManyBodies::K_x_U, "Multiply K by U")
+      .def("KT_x_Lam", &CManyBodies::KT_x_Lam, "Multiply K^T by Lambda")
+      .def("multi_body_pos", &CManyBodies::multi_body_pos,
+           "Get the blob positions")
+      .def("apply_PC", &CManyBodies::apply_PC<Vector>, "apply for PC");
 }
-
 
 // NB_MODULE(c_rigid, m) {
 //     m.doc() = "Rigid code";
@@ -1146,17 +1146,18 @@ NB_MODULE(c_rigid, m) {
 //         .def("test_PC", &CManyBodies::test_PC<RefVector &>, "test_PC")
 //         .def("Test_Mhalf", &CManyBodies::Test_Mhalf, "Test_Mhalf")
 //         .def("apply_M", &CManyBodies::apply_M<RefVector &>, "apply M")
-//         .def("M_RFD_from_U", &CManyBodies::M_RFD_from_U<RefVector &>, "M RFD")
-//         .def("KT_RFD_from_U", &CManyBodies::KT_RFD_from_U<RefVector &>,
+//         .def("M_RFD_from_U", &CManyBodies::M_RFD_from_U<RefVector &>, "M
+//         RFD") .def("KT_RFD_from_U", &CManyBodies::KT_RFD_from_U<RefVector &>,
 //              "KT RFD")
-//         .def("update_X_Q_out", &CManyBodies::update_X_Q_out, "update_X_Q_out")
-//         .def("KTinv_RFD", &CManyBodies::KTinv_RFD, "KTinv_RFD")
-//         .def("M_RFD", &CManyBodies::M_RFD, "M_RFD")
-//         .def("M_RFD_cfgs", &CManyBodies::M_RFD_cfgs<RefVector &>, "M_RFD_cfgs")
-//         .def("M_half_W", &CManyBodies::M_half_W, "M_half_W")
+//         .def("update_X_Q_out", &CManyBodies::update_X_Q_out,
+//         "update_X_Q_out") .def("KTinv_RFD", &CManyBodies::KTinv_RFD,
+//         "KTinv_RFD") .def("M_RFD", &CManyBodies::M_RFD, "M_RFD")
+//         .def("M_RFD_cfgs", &CManyBodies::M_RFD_cfgs<RefVector &>,
+//         "M_RFD_cfgs") .def("M_half_W", &CManyBodies::M_half_W, "M_half_W")
 //         .def("RHS_and_Midpoint", &CManyBodies::RHS_and_Midpoint,
 //              "RHS_and_Midpoint")
 //         .def("evolve_X_Q", &CManyBodies::evolve_X_Q, "evolve_X_Q")
-//         .def("evolve_X_Q_RFD", &CManyBodies::evolve_X_Q_RFD, "evolve_X_Q_RFD")
-//         .def("get_K_Kinv", &CManyBodies::get_K_Kinv, "get_K_Kinv");
+//         .def("evolve_X_Q_RFD", &CManyBodies::evolve_X_Q_RFD,
+//         "evolve_X_Q_RFD") .def("get_K_Kinv", &CManyBodies::get_K_Kinv,
+//         "get_K_Kinv");
 // }
