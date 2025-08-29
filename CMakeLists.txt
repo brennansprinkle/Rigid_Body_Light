@@ -19,6 +19,9 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
   set(CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS "${CMAKE_SHARED_LIBRARY_CREATE_CXX_FLAGS} -undefined dynamic_lookup")
 endif()
 
+if(DOUBLEPRECISION)
+  add_compile_definitions(PUBLIC DOUBLE_PRECISION)
+endif()
 
 # # Ensure ${Python_SOABI} is not empty
 # if(NOT Python_SOABI)
