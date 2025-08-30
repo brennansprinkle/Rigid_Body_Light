@@ -201,8 +201,8 @@ public:
 
   void setWallPC(bool Wall) { PC_wall = Wall; }
 
-  template <typename RefVecType> void setConfig(RefVecType X_0, RefVecType Q) {
-    N_bod = X_0.size() / 3;
+  template <typename RefVecType> void setConfig(RefVecType X, RefVecType Q) {
+    N_bod = X.size() / 3;
     if (!cfg_set) {
       Q_n.reserve(4 * N_bod);
       X_n.reserve(3 * N_bod);
@@ -210,7 +210,7 @@ public:
 
     for (int j = 0; j < N_bod; ++j) {
       Quat Q_j;
-      Vector X_0_j(3);
+      Vector X_j(3);
       // set quaternion
       Q_j.x() = Q(4 * j + 1);
       Q_j.y() = Q(4 * j + 2);
@@ -223,13 +223,13 @@ public:
         Q_n[j] = Q_j;
       }
       // set disp
-      X_0_j(0) = X_0(3 * j + 0);
-      X_0_j(1) = X_0(3 * j + 1);
-      X_0_j(2) = X_0(3 * j + 2);
+      X_j(0) = X(3 * j + 0);
+      X_j(1) = X(3 * j + 1);
+      X_j(2) = X(3 * j + 2);
       if (!cfg_set) {
-        X_n.push_back(X_0_j);
+        X_n.push_back(X_j);
       } else {
-        X_n[j] = X_0_j;
+        X_n[j] = X_j;
       }
     }
     cfg_set = true;
@@ -423,13 +423,13 @@ public:
     //      std::cout << (KTK*KTKi_mat) << "\n";
   }
 
-  Vector K_x_U(RefVector U) { return K * U; }
+  Vector K_x_U(const Vector &U) { return K * U; }
 
-  Vector Kinv_x_V(RefVector V) { return Kinv * V; }
+  Vector Kinv_x_V(const Vector &V) { return Kinv * V; }
 
-  Vector KTinv_x_F(RefVector F) { return Kinv.transpose() * F; }
+  Vector KTinv_x_F(const Vector &F) { return Kinv.transpose() * F; }
 
-  Vector KT_x_Lam(RefVector Lam) { return KT * Lam; }
+  Vector KT_x_Lam(const Vector &Lam) { return KT * Lam; }
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -642,7 +642,7 @@ public:
     std::cout << "error U: " << (Upc - U).norm() << "\n";
   }
 
-  template <class AVector> Vector apply_PC(AVector &IN) {
+  Vector apply_PC(const Vector &IN) {
 
     if (not PC_mat_Set) {
       invM = PC_invM();
@@ -1098,25 +1098,18 @@ public:
 private:
 };
 
-template <typename VecType> void bind_setConfig(nb::class_<CManyBodies> &cls) {
-  cls.def(
-      "setConfig", // TODO I think this needs to use an eigen::map to avoid copies
-      [](CManyBodies &self, VecType X, VecType Q) { self.setConfig(X, Q); },
-      "Set the X and Q vectors for the current position");
-}
-
 NB_MODULE(c_rigid, m) {
   m.doc() = "Rigid code";
 
   nb::class_<CManyBodies> cls(m, "CManyBodies");
+  // TODO some of these functions (e.g. K_x_U, KT_x_Lam) will automatically cast
+  // between precisions (and thus invoke a copy). This is currently necessary
+  // since the functions aren't templated and the Eigen types only work in the
+  // compiled precision.
 
+  typedef Eigen::VectorXd VectorXd;
+  typedef Eigen::VectorXf VectorXf;
   cls.def(nb::init<>())
-      // .def(
-      //     "setConfig",
-      //     [](CManyBodies &self, Vector X, Vector Q) {
-      //       self.setConfig(X, Q);
-      //     },
-      //     "Set the X and Q vectors for the current position")
       .def("getConfig", &CManyBodies::getConfig,
            "get the X and Q vectors for the current position")
       .def("setParameters", &CManyBodies::setParameters,
@@ -1125,56 +1118,17 @@ NB_MODULE(c_rigid, m) {
       .def("setWallPC", &CManyBodies::setWallPC, "use wall corrections")
       .def("set_K_mats", &CManyBodies::set_K_mats,
            "Set the K,K^T,K^-1 matrices for the module")
-      .def("K_x_U", &CManyBodies::K_x_U, "Multiply K by U")
-      .def("KT_x_Lam", &CManyBodies::KT_x_Lam, "Multiply K^T by Lambda")
+      .def("K_x_U", &CManyBodies::K_x_U, "Multiply K by U", nb::arg("U"))
+      .def("KT_x_Lam", &CManyBodies::KT_x_Lam, "Multiply K^T by lambda",
+           nb::arg("lambda"))
       .def("multi_body_pos", &CManyBodies::multi_body_pos,
            "Get the blob positions")
-      .def("apply_PC", &CManyBodies::apply_PC<Vector>, "apply for PC");
-  typedef Eigen::Ref<const Eigen::VectorXd> RefVectorXd;
-  typedef Eigen::Ref<const Eigen::VectorXf> RefVectorXf;
-  bind_setConfig<RefVectorXd>(cls);
-  bind_setConfig<RefVectorXf>(cls);
+      .def("apply_PC", &CManyBodies::apply_PC, "apply for PC");
+
+  cls.def("setConfig", &CManyBodies::setConfig<VectorXd>,
+          "Set the X and Q vectors for the current position",
+          nb::arg("X").noconvert(), nb::arg("Q").noconvert())
+      .def("setConfig", &CManyBodies::setConfig<VectorXf>,
+           "Set the X and Q vectors for the current position",
+           nb::arg("X").noconvert(), nb::arg("Q").noconvert());
 }
-
-// NB_MODULE(c_rigid, m) {
-//     m.doc() = "Rigid code";
-
-//     nb::class_<CManyBodies>(m, "CManyBodies")
-//         .def(nb::init<>())
-//         .def("setParameters", &CManyBodies::setParameters,
-//              "Set parameters for the module")
-//         .def("setBlkPC", &CManyBodies::setBlkPC, "set PC type")
-//         .def("setWallPC", &CManyBodies::setWallPC, "use wall corrections")
-//         .def("multi_body_pos", &CManyBodies::multi_body_pos,
-//              "Get the blob positions")
-//         .def("setConfig", &CManyBodies::setConfig,
-//              "Set the X and Q vectors for the current position")
-//         .def("getConfig", &CManyBodies::getConfig,
-//              "get the X and Q vectors for the current position");
-//         .def("set_K_mats", &CManyBodies::set_K_mats,
-//              "Set the K,K^T,K^-1 matrices for the module")
-//         .def("K_x_U", &CManyBodies::K_x_U, "Multiply K by U")
-//         .def("Kinv_x_V", &CManyBodies::Kinv_x_V, "Multiply Kinv by V")
-//         .def("KTinv_x_F", &CManyBodies::KTinv_x_F, "Multiply KTinv by F")
-//         .def("KT_x_Lam", &CManyBodies::KT_x_Lam, "Multiply K^T by Lambda")
-//         .def("apply_PC", &CManyBodies::apply_PC<RefVector &>, "apply for PC")
-//         .def("apply_Saddle", &CManyBodies::apply_Saddle<RefVector &>,
-//              "apply for [M, -K;-K^T, 0]")
-//         .def("test_PC", &CManyBodies::test_PC<RefVector &>, "test_PC")
-//         .def("Test_Mhalf", &CManyBodies::Test_Mhalf, "Test_Mhalf")
-//         .def("apply_M", &CManyBodies::apply_M<RefVector &>, "apply M")
-//         .def("M_RFD_from_U", &CManyBodies::M_RFD_from_U<RefVector &>, "M
-//         RFD") .def("KT_RFD_from_U", &CManyBodies::KT_RFD_from_U<RefVector &>,
-//              "KT RFD")
-//         .def("update_X_Q_out", &CManyBodies::update_X_Q_out,
-//         "update_X_Q_out") .def("KTinv_RFD", &CManyBodies::KTinv_RFD,
-//         "KTinv_RFD") .def("M_RFD", &CManyBodies::M_RFD, "M_RFD")
-//         .def("M_RFD_cfgs", &CManyBodies::M_RFD_cfgs<RefVector &>,
-//         "M_RFD_cfgs") .def("M_half_W", &CManyBodies::M_half_W, "M_half_W")
-//         .def("RHS_and_Midpoint", &CManyBodies::RHS_and_Midpoint,
-//              "RHS_and_Midpoint")
-//         .def("evolve_X_Q", &CManyBodies::evolve_X_Q, "evolve_X_Q")
-//         .def("evolve_X_Q_RFD", &CManyBodies::evolve_X_Q_RFD,
-//         "evolve_X_Q_RFD") .def("get_K_Kinv", &CManyBodies::get_K_Kinv,
-//         "get_K_Kinv");
-// }
