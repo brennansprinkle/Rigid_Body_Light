@@ -69,7 +69,6 @@ class RigidBody:
             )
         result = self.cb.KT_x_Lam(lambda_vec.astype(self.dtype))
         shape = (-1, 3) if len(self.X_shape) == 2 else (-1)
-        print(self.dtype)
         return np.array(result).reshape(shape).astype(self.dtype)
 
     def K_dot(self, U_vec):
