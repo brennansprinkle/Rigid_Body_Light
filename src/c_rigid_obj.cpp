@@ -171,6 +171,12 @@ class CManyBodies {
   SparseM K, KT, Kinv;
 
 public:
+#ifdef SINGLE_PRECISION
+  static constexpr auto precision = "single";
+#else
+  static constexpr auto precision = "double";
+#endif
+
   void removeMean(Matrix &Cfg) {
     Vector mean = Cfg.colwise().mean();
     // std::cout << "Old mean: " << mean.transpose() << "\n";
@@ -201,7 +207,7 @@ public:
 
   void setWallPC(bool Wall) { PC_wall = Wall; }
 
-  template <typename RefVecType> void setConfig(RefVecType X, RefVecType Q) {
+  void setConfig(Vector X, Vector Q) {
     N_bod = X.size() / 3;
     if (!cfg_set) {
       Q_n.reserve(4 * N_bod);
@@ -1102,13 +1108,6 @@ NB_MODULE(c_rigid, m) {
   m.doc() = "Rigid code";
 
   nb::class_<CManyBodies> cls(m, "CManyBodies");
-  // TODO some of these functions (e.g. K_x_U, KT_x_Lam) will automatically cast
-  // between precisions (and thus invoke a copy). This is currently necessary
-  // since the functions aren't templated and the Eigen types only work in the
-  // compiled precision.
-
-  typedef Eigen::VectorXd VectorXd;
-  typedef Eigen::VectorXf VectorXf;
   cls.def(nb::init<>())
       .def("getConfig", &CManyBodies::getConfig,
            "get the X and Q vectors for the current position")
@@ -1123,12 +1122,11 @@ NB_MODULE(c_rigid, m) {
            nb::arg("lambda"))
       .def("multi_body_pos", &CManyBodies::multi_body_pos,
            "Get the blob positions")
-      .def("apply_PC", &CManyBodies::apply_PC, "apply for PC");
-
-  cls.def("setConfig", &CManyBodies::setConfig<VectorXd>,
-          "Set the X and Q vectors for the current position",
-          nb::arg("X").noconvert(), nb::arg("Q").noconvert())
-      .def("setConfig", &CManyBodies::setConfig<VectorXf>,
-           "Set the X and Q vectors for the current position",
-           nb::arg("X").noconvert(), nb::arg("Q").noconvert());
+      .def("apply_PC", &CManyBodies::apply_PC, "apply for PC")
+      .def("setConfig", &CManyBodies::setConfig,
+           "Set the X and Q vectors for the current position", nb::arg("X"),
+           nb::arg("Q"))
+      .def_prop_ro_static(
+          "precision", [](nb::object) { return CManyBodies::precision; },
+          R"pbdoc(Compilation precision, a string holding either single or double.)pbdoc");
 }

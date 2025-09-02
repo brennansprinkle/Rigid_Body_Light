@@ -14,9 +14,7 @@ def load_config(file_name):
     return s, config
 
 
-def create_solver(
-    X, Q, rigid_config=None, wall_PC=False, block_PC=False, precision=np.float32
-):
+def create_solver(X, Q, rigid_config=None, wall_PC=False, block_PC=False):
     if rigid_config is None:
         _, rigid_config = load_config(struct_shell_12)
 
@@ -29,7 +27,6 @@ def create_solver(
         dt=1.0,
         wall_PC=wall_PC,
         block_PC=block_PC,
-        precision=precision,
     )
 
 
