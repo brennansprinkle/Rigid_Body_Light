@@ -11,6 +11,7 @@
 #include <Eigen/src/Core/Matrix.h>
 #include <cmath>
 #include <nanobind/eigen/dense.h>
+#include <nanobind/eigen/sparse.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 #include <nanobind/stl/vector.h>
@@ -1093,12 +1094,20 @@ public:
     return RHS;
   }
 
-  auto get_K_Kinv() {
+  auto get_K(){    
     if (!cfg_set) {
       std::cout << "ERROR CONFIG NOT INITIALIZED YET!!\n";
     }
 
-    return std::make_tuple(K, Kinv);
+    return K;
+  }
+
+  auto get_Kinv() {
+    if (!cfg_set) {
+      std::cout << "ERROR CONFIG NOT INITIALIZED YET!!\n";
+    }
+
+    return Kinv;
   }
 
 private:
@@ -1126,6 +1135,8 @@ NB_MODULE(c_rigid, m) {
       .def("setConfig", &CManyBodies::setConfig,
            "Set the X and Q vectors for the current position", nb::arg("X"),
            nb::arg("Q"))
+      .def("get_K", &CManyBodies::get_K, "get K")
+      .def("get_Kinv", &CManyBodies::get_Kinv, "get Kinv")
       .def_prop_ro_static(
           "precision", [](nb::object) { return CManyBodies::precision; },
           R"pbdoc(Compilation precision, a string holding either single or double.)pbdoc");

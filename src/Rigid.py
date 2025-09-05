@@ -86,6 +86,12 @@ class RigidBody:
         in_vec = np.concatenate((lambda_vec, U_vec))
         return self.cb.apply_PC(in_vec)
 
+    def get_K(self):
+        return self.cb.get_K()
+    
+    def get_Kinv(self):
+        return self.cb.get_Kinv()
+
     def __check_and_set_shapes(self, X, Q):
         x_size = np.prod(np.shape(X))
         q_size = np.prod(np.shape(Q))

@@ -112,8 +112,18 @@ def test_KT_dot():
     assert result.shape == shape
     assert np.linalg.norm(result) > 0.0
 
+def test_get_K_Kinv():
+    N_rigid = 3
+    X, Q = utils.create_random_positions(N_rigid)
+    _, config = utils.load_config(struct_shell_12)
+    cb = utils.create_solver(rigid_config=config, X=X, Q=Q)
+    
+    K = cb.get_K()
+    K_inv = cb.get_Kinv()
 
-# TODO is (True, True) to use both PCs valid?
+    assert np.sum(np.abs(K)) > 0.0
+    assert np.sum(np.abs(K_inv)) > 0.0
+
 @pytest.mark.parametrize(
     ("block_PC", "wall_PC"),
     ((False, False), (True, False), (False, True), (True, True)),

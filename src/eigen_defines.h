@@ -40,6 +40,5 @@ typedef Eigen::Triplet<real> Trip;
 typedef Eigen::SparseMatrix<real> SparseM;
 typedef Eigen::DiagonalMatrix<real, Eigen::Dynamic> DiagM;
 typedef Eigen::Triplet<real> Trip_d;
-typedef Eigen::SparseMatrix<real> SparseMd;
 
 #endif // C_RIGID_EIGEN_TYPEDEFS_H
