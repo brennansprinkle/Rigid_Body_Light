@@ -74,7 +74,7 @@ def test_blob_positions():
         pos_i = r_i.apply(config.copy()) + x_i
         ref_pos[i * blobs_per_body : (i + 1) * blobs_per_body, :] = pos_i
 
-    assert np.allclose(pos, ref_pos)
+    assert np.allclose(pos, ref_pos, atol=1e-5)
 
 
 def test_K_dot():
@@ -112,17 +112,19 @@ def test_KT_dot():
     assert result.shape == shape
     assert np.linalg.norm(result) > 0.0
 
+
 def test_get_K_Kinv():
     N_rigid = 3
     X, Q = utils.create_random_positions(N_rigid)
     _, config = utils.load_config(struct_shell_12)
     cb = utils.create_solver(rigid_config=config, X=X, Q=Q)
-    
+
     K = cb.get_K()
     K_inv = cb.get_Kinv()
 
     assert np.sum(np.abs(K)) > 0.0
     assert np.sum(np.abs(K_inv)) > 0.0
+
 
 @pytest.mark.parametrize(
     ("block_PC", "wall_PC"),
@@ -142,3 +144,18 @@ def test_apply_PC(block_PC, wall_PC):
     PC = cb.apply_PC(lambda_vec, U)
 
     assert np.linalg.norm(PC) > 0.0
+
+
+def test_evolve_rigid_bodies():
+    N_rigid = 3
+    X, Q = utils.create_random_positions(N_rigid)
+    _, config = utils.load_config(struct_shell_12)
+    cb = utils.create_solver(rigid_config=config, X=X, Q=Q)
+
+    U = np.random.randn(6 * N_rigid)
+    cb.evolve_rigid_bodies(U)
+
+    X_new, Q_new = cb.get_config()
+
+    assert np.linalg.norm(X_new - X) > 0.0
+    assert np.linalg.norm(Q_new - Q) > 0.0

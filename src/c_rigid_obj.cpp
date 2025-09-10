@@ -1137,6 +1137,7 @@ NB_MODULE(c_rigid, m) {
            nb::arg("Q"))
       .def("get_K", &CManyBodies::get_K, "get K")
       .def("get_Kinv", &CManyBodies::get_Kinv, "get Kinv")
+      .def("evolve_X_Q", &CManyBodies::evolve_X_Q, "evolve rigid bodies", nb::arg("U"))
       .def_prop_ro_static(
           "precision", [](nb::object) { return CManyBodies::precision; },
           R"pbdoc(Compilation precision, a string holding either single or double.)pbdoc");

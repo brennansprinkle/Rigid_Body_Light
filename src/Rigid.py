@@ -26,8 +26,7 @@ class RigidBody:
 
         if rigid_config.size % 3 != 0:
             raise RuntimeError(
-                "Rigid config must have length 3N. Rigid config shape: "
-                + str(rigid_config.shape)
+                f"Rigid config must have length 3N. Rigid config shape: {rigid_config.shape}"
             )
         self.blobs_per_body = rigid_config.size // 3
 
@@ -61,24 +60,18 @@ class RigidBody:
     def KT_dot(self, lambda_vec):
         if lambda_vec.size != 3 * self.total_blobs:
             raise RuntimeError(
-                "lambda must have total size 3*N_blobs = "
-                + str(3 * self.total_blobs)
-                + ". lambda_vec shape: "
-                + str(lambda_vec.shape)
+                f"lambda must have total size 3*N_blobs = {3 * self.total_blobs}. lambda_vec shape: {lambda_vec.shape}"
             )
         result = self.cb.KT_x_Lam(lambda_vec)
         shape = (-1, 3) if len(self.X_shape) == 2 else (-1)
         return np.array(result).reshape(shape)
 
-    def K_dot(self, U_vec):
-        if U_vec.size != 6 * self.N_bodies:
+    def K_dot(self, U):
+        if U.size != 6 * self.N_bodies:
             raise RuntimeError(
-                "U must have total size 6*N_bodies = "
-                + str(6 * self.N_bodies)
-                + ". U_vec shape: "
-                + str(U_vec.shape)
+                f"U must have total size 6*N_bodies = {6*self.N_bodies}. U shape: {U.shape}"
             )
-        result = self.cb.K_x_U(U_vec)
+        result = self.cb.K_x_U(U)
         shape = (-1, 3) if len(self.X_shape) == 2 else (-1)
         return np.array(result).reshape(shape)
 
@@ -88,9 +81,16 @@ class RigidBody:
 
     def get_K(self):
         return self.cb.get_K()
-    
+
     def get_Kinv(self):
         return self.cb.get_Kinv()
+
+    def evolve_rigid_bodies(self, U):
+        if U.size != 6 * self.N_bodies:
+            raise RuntimeError(
+                f"U must have total size 6*N_bodies = {6*self.N_bodies}. U shape: {U.shape}"
+            )
+        self.cb.evolve_X_Q(U)
 
     def __check_and_set_shapes(self, X, Q):
         x_size = np.prod(np.shape(X))
