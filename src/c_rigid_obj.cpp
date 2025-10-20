@@ -703,6 +703,10 @@ public:
   }
 
   DiagM make_damp_mat(std::vector<real> &r_vectors) {
+    /*
+     matrix used to regularise the mobility matrix to allow for particle-wall
+     overlaps see Balboa Usabiaga, Delmotte, and Donev 2017 appendix A
+   */
     int N = r_vectors.size();
     int Nparts = N / 3;
     Vector B(N);
@@ -723,12 +727,22 @@ public:
 
   template <class AVector>
   Vector apply_M(AVector &F, std::vector<real> &r_vectors) {
+    /*
+     returns U = B(r) * { M(r) * [ B(r) * F ] }
+     F and r are 3*Nblob*Nbody vectors
+     M is the blob-blob mobilities
+    */
     int sz = r_vectors.size();
     Vector U(sz);
     U.setZero();
     Matrix M = rotne_prager_tensor(r_vectors);
-    DiagM B = make_damp_mat(r_vectors);
-    U = B * (M * (B * F));
+    if (PC_wall) {
+      DiagM B = make_damp_mat(r_vectors);
+      U = B * (M * (B * F));
+    } else {
+      U = M * F;
+    }
+
     return U;
   }
 
@@ -750,6 +764,11 @@ public:
   }
 
   template <class AVector> Vector apply_Saddle(AVector &IN) {
+    /*
+   Sprinkle et al 2017 eq 6:
+      | M    -K | | lambda | = | -u |
+      | -K.T  0 | | U      |   | -F |
+   */
     std::vector<real> r_vectors = multi_body_pos();
 
     Vector Lambda = IN.head(3 * N_bod * N_blb);
@@ -1094,7 +1113,7 @@ public:
     return RHS;
   }
 
-  auto get_K(){    
+  auto get_K() {
     if (!cfg_set) {
       std::cout << "ERROR CONFIG NOT INITIALIZED YET!!\n";
     }
@@ -1137,7 +1156,8 @@ NB_MODULE(c_rigid, m) {
            nb::arg("Q"))
       .def("get_K", &CManyBodies::get_K, "get K")
       .def("get_Kinv", &CManyBodies::get_Kinv, "get Kinv")
-      .def("evolve_X_Q", &CManyBodies::evolve_X_Q, "evolve rigid bodies", nb::arg("U"))
+      .def("evolve_X_Q", &CManyBodies::evolve_X_Q, "evolve rigid bodies",
+           nb::arg("U"))
       .def_prop_ro_static(
           "precision", [](nb::object) { return CManyBodies::precision; },
           R"pbdoc(Compilation precision, a string holding either single or double.)pbdoc");

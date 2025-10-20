@@ -11,3 +11,4 @@ dependencies:
   - cxx-compiler
   - eigen
   - pytest
+  - cmake
