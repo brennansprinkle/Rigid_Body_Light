@@ -1,7 +1,6 @@
 name: rigid
 channels:
   - conda-forge
-  - defaults
 dependencies:
   - scipy
   - numpy
@@ -12,3 +11,4 @@ dependencies:
   - cxx-compiler
   - eigen
   - pytest
+  - cmake
