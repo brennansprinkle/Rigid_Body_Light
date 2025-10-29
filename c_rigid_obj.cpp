@@ -317,7 +317,9 @@ public:
   
   
   Matrix get_r_vecs(Vector& X_0, Quat& Q){
-    // ...
+    /*
+    get the coordinates of the blobs of a body with the given position and rotation, as a Matrix
+    */
     Matrix3 rotation_matrix = Q.toRotationMatrix();
     //std::cout << rotation_matrix << '\n';
     Matrix r_vectors = Ref_Cfg * rotation_matrix.transpose();
@@ -331,7 +333,9 @@ public:
   
   
   std::vector<real> single_body_pos(Vector& X_0, Quat& Q){
-    // ...
+    /*
+    get the coordinates of the blobs of a body with the given position and rotation, as a vector
+    */
     Matrix r_vectors = get_r_vecs(X_0, Q);
     Vector r_j;
     std::vector<real> pos;
@@ -347,6 +351,9 @@ public:
   }
   
   std::vector<real> r_vecs_from_cfg(std::vector<Vector>& Xin, std::vector<Quat>& Qin){
+    /*
+    get the coordinates of all the blobs (aka r_vectors)
+    */
     int size = N_bod*(Ref_Cfg.size());
     std::vector<real> pos;
     pos.reserve(size);
@@ -421,8 +428,7 @@ public:
     // sum of r_i^{T}*r_i and sum of r_i*r_i^{T}
     // where r_i is in Ref config (for (KT*K)^-1)
     double sumr2_cfg = Ref_Cfg.squaredNorm();
-    Matrix3 MOI_cfg; 
-    MOI_cfg *= 0.0;
+    Matrix3 MOI_cfg = Matrix3::Zero();
     for(int k = 0; k < N_blb; ++k){
         r_k = Ref_Cfg.row(k);
         MOI_cfg += r_k * r_k.transpose();
@@ -906,6 +912,9 @@ public:
     
     
     std::tuple<std::vector<Quat>,std::vector<Vector>> update_X_Q(Vector& U){
+        /*
+        get new body rotations and positions (Q, X) from provided body velocities (U)
+        */
         std::vector<Quat> Qin( Q_n );
         std::vector<Vector> Xin( X_n );
 
@@ -1028,25 +1037,21 @@ public:
     
     template<class AVector>
     auto M_RFD_cfgs(AVector& U, double delta){        
-        
-        int sz = 3*N_bod*N_blb;
-       // Make random vector
-        Vector W = rand_vector(sz);
-        
-        //Vector UOM = Kinv*W;
-        
+        /*
+        returns (r+, r-)
+        where r+ (r-) are the blob coords after applying a positive (negative) random velocity U * delta/2 to the bodies
+        */
         std::vector<Quat> Qp;
         std::vector<Vector> Xp;
         std::vector<Quat> Qm;
         std::vector<Vector> Xm;
         
-        
         Vector Win = ((delta/2.0)*U);
-        std::tie(Qp,Xp) = update_X_Q(Win);
-        std::vector<real> r_vec_p =  r_vecs_from_cfg(Xp,Qp);
+        std::tie(Qp,Xp) = update_X_Q(Win); // get body positions/rotations from positive random body velocities
+        std::vector<real> r_vec_p = r_vecs_from_cfg(Xp,Qp); // get blob positions from body positions/rotations
         Win *= -1.0;
-        std::tie(Qm,Xm) = update_X_Q(Win);
-        std::vector<real> r_vec_m =  r_vecs_from_cfg(Xm,Qm);
+        std::tie(Qm,Xm) = update_X_Q(Win); // get body positions/rotations from negative random body velocities
+        std::vector<real> r_vec_m = r_vecs_from_cfg(Xm,Qm); // get blob positions from body positions/rotations
                 
         return std::make_tuple(r_vec_p,r_vec_m);
     }
@@ -1083,30 +1088,33 @@ public:
 
     template<class AVector>
     Vector KT_RFD_from_U(AVector& U, AVector& W){        
+        /*
+        W is a random slip on the blobs
+        and U the resultant random velocity on the bodies
+        */
         
         double delta = 1.0e-3;
         
         int sz = 3*N_bod*N_blb;
-       // Make random vector
         
         std::vector<Quat> Qp;
         std::vector<Vector> Xp;
         std::vector<Quat> Qm;
         std::vector<Vector> Xm;
         
-        
         Vector Win = ((delta/2.0)*U);
-        std::tie(Qp,Xp) = update_X_Q(Win);
+        std::tie(Qp,Xp) = update_X_Q(Win); // body positions and rotations from applying a velocity of delta/2 * U
         Win *= -1.0;
-        std::tie(Qm,Xm) = update_X_Q(Win);
+        std::tie(Qm,Xm) = update_X_Q(Win); // body positions and rotations from applying a velocity of -delta/2 * U
         
         SparseM Kp, Kinvp, Km, Kinvm;
-        std::tie(Kp,Kinvp) = Make_K_Kinv(Xp, Qp);
-        std::tie(Km,Kinvm) = Make_K_Kinv(Xm, Qm);
+        std::tie(Kp,Kinvp) = Make_K_Kinv(Xp, Qp); // Kp = K(Q + delta/2 * U)
+        std::tie(Km,Kinvm) = Make_K_Kinv(Xm, Qm); // Km = K(Q - delta/2 * U)
         
-        Vector out = (1.0/delta)*(Kp.transpose()*W - Km.transpose()*W);
                 
-        return out;
+        Vector KT_RFD = (1.0/delta)*(Kp.transpose()*W - Km.transpose()*W); // 1/delta * ( Kp . W - Km . W )
+
+        return KT_RFD;
     }
 
 
