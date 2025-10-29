@@ -361,8 +361,7 @@ public:
     // sum of r_i^{T}*r_i and sum of r_i*r_i^{T}
     // where r_i is in Ref config (for (KT*K)^-1)
     double sumr2_cfg = Ref_Cfg.squaredNorm();
-    Matrix3 MOI_cfg;
-    MOI_cfg *= 0.0;
+    Matrix3 MOI_cfg = Matrix3::Zero();
     for (int k = 0; k < N_blb; ++k) {
       r_k = Ref_Cfg.row(k);
       MOI_cfg += r_k * r_k.transpose();
@@ -467,7 +466,6 @@ public:
     real Mzx, Mzy, Mzz;
 
     Matrix Mob(N, N);
-    Matrix3 Block;
 
     for (int i = 0; i < Nparts; ++i) {
       for (int j = i; j < Nparts; ++j) {
@@ -486,7 +484,7 @@ public:
                                          Mzz, i, j, r_vectors[3 * j + 2] / a);
         }
 
-        Block << Mxx, Mxy, Mxz, Myx, Myy, Myz, Mzx, Mzy, Mzz;
+        Matrix3 Block{{Mxx, Mxy, Mxz}, {Myx, Myy, Myz}, {Mzx, Mzy, Mzz}};
 
         Mob.block<3, 3>(3 * i, 3 * j) = Block;
         if (j != i) {
@@ -562,8 +560,6 @@ public:
     std::vector<Trip> tripletList;
     tripletList.reserve(Nparts * 3 * 3);
 
-    Matrix3 Block, Minv;
-
     for (int i = 0; i < Nparts; ++i) {
       int j = i;
 
@@ -577,9 +573,9 @@ public:
             Myx, Myy, Myz, Mzx, Mzy, Mzz, i, j, r_vectors[3 * j + 2] / a);
       }
 
-      Block << Mxx, Mxy, Mxz, Myx, Myy, Myz, Mzx, Mzy, Mzz;
+      Matrix3 Block{{Mxx, Mxy, Mxz}, {Myx, Myy, Myz}, {Mzx, Mzy, Mzz}};
 
-      Minv = Block.inverse();
+      Matrix3 Minv = Block.inverse();
 
       tripletList.push_back(Trip(i * 3, j * 3, Minv(0, 0)));
       tripletList.push_back(Trip(i * 3, j * 3 + 1, Minv(0, 1)));
@@ -595,10 +591,7 @@ public:
     }
     SparseM mat(N, N);
     mat.setFromTriplets(tripletList.begin(), tripletList.end());
-
     mat *= norm_fact_f;
-
-    // std::cout << mat << "\n";
 
     return mat;
   }
