@@ -145,6 +145,13 @@ def test_apply_PC(block_PC, wall_PC):
 
     assert np.linalg.norm(PC) > 0.0
 
+    with pytest.raises(RuntimeError):
+        lambda_bad_size = np.random.randn(3 * blobs_per_body * N_rigid - 5)
+        cb.apply_PC(lambda_bad_size, U)
+    with pytest.raises(RuntimeError):
+        U_bad_size = np.random.randn(6 * N_rigid - 3)
+        cb.apply_PC(lambda_vec, U_bad_size)
+
 
 def test_evolve_rigid_bodies():
     N_rigid = 3
