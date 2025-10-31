@@ -17,8 +17,6 @@ class RigidBody:
         wall_PC=False,
         block_PC=False,
     ):
-        # TODO currently, precision guarantees for some functions are supported purely by casting. The issue is the C++ code is not templated properly, and some functions (e.g. K_x_U) always run in the compiled precision. This needs to get fixed in the C++ code and then we can remove a lot of the casting here.
-
         self.cb = crigid.CManyBodies()
         self.precision = self.cb.precision
 
@@ -53,7 +51,6 @@ class RigidBody:
         self.total_blobs = self.N_bodies * self.blobs_per_body
 
     def get_blob_positions(self):
-        # TODO can we avoid casting here by changing the C++ code?
         shape = (-1, 3) if len(self.X_shape) == 2 else (-1)
         return np.array(self.cb.multi_body_pos()).reshape(shape)
 
