@@ -3,15 +3,20 @@ from Rigid import RigidBody
 import os
 
 struct_dir = os.path.dirname(os.path.abspath(__file__)) + "/../structures/"
-struct_shell_12 = struct_dir + "shell_N_12_Rg_0_7921_Rh_1.vertex"
+struct_shell_12 = struct_dir + "shell_N_12.csv"
 
 
 def load_config(file_name):
     with open(file_name, "r") as f:
-        lines = f.readlines()
-        s = float(lines[0].split()[0])
-        config = np.array([[float(j) for j in i.split()] for i in lines[1:]])
-    return s, config
+        _ = f.readline()
+        params = f.readline().strip().split(",")
+        sep = float(params[0].split(" ")[1])
+        N = int(params[1])
+        rg = float(params[2])
+        rh = int(params[3])
+        cfg = np.loadtxt(f, delimiter=" ")
+        params = {"sep": sep, "N": N, "Rg": rg, "Rh": rh}
+    return params, cfg
 
 
 def create_solver(X, Q, rigid_config=None, wall_PC=False, block_PC=False):

@@ -3,16 +3,12 @@ import pytest
 from Rigid import RigidBody
 from scipy.spatial.transform import Rotation
 import utils
-import os
-
-struct_dir = os.path.dirname(os.path.abspath(__file__)) + "/../structures/"
-struct_shell_12 = struct_dir + "shell_N_12_Rg_0_7921_Rh_1.vertex"
 
 
 def test_create():
     a = 1.0
     eta = 1.0
-    _, config = utils.load_config(struct_shell_12)
+    _, config = utils.load_config(utils.struct_shell_12)
 
     N = 10
     X = np.random.randn(N, 3)
@@ -59,7 +55,7 @@ def test_bad_config():
 def test_blob_positions():
     N = 5
     X, Q = utils.create_random_positions(N)
-    _, config = utils.load_config(struct_shell_12)
+    _, config = utils.load_config(utils.struct_shell_12)
     blobs_per_body = config.shape[0]
     cb = utils.create_solver(rigid_config=config, X=X, Q=Q)
 
@@ -80,7 +76,7 @@ def test_blob_positions():
 def test_K_dot():
     N_rigid = 3
     X, Q = utils.create_random_positions(N_rigid)
-    _, config = utils.load_config(struct_shell_12)
+    _, config = utils.load_config(utils.struct_shell_12)
     cb = utils.create_solver(rigid_config=config, X=X, Q=Q)
     blobs_per_body = config.shape[0]
 
@@ -98,7 +94,7 @@ def test_K_dot():
 def test_KT_dot():
     N_rigid = 3
     X, Q = utils.create_random_positions(N_rigid)
-    _, config = utils.load_config(struct_shell_12)
+    _, config = utils.load_config(utils.struct_shell_12)
     cb = utils.create_solver(rigid_config=config, X=X, Q=Q)
     blobs_per_body = config.shape[0]
 
@@ -116,7 +112,7 @@ def test_KT_dot():
 def test_get_K_Kinv():
     N_rigid = 3
     X, Q = utils.create_random_positions(N_rigid)
-    _, config = utils.load_config(struct_shell_12)
+    _, config = utils.load_config(utils.struct_shell_12)
     cb = utils.create_solver(rigid_config=config, X=X, Q=Q)
 
     K = cb.get_K()
@@ -133,7 +129,7 @@ def test_get_K_Kinv():
 def test_apply_PC(block_PC, wall_PC):
     N_rigid = 3
     X, Q = utils.create_random_positions(N_rigid)
-    _, config = utils.load_config(struct_shell_12)
+    _, config = utils.load_config(utils.struct_shell_12)
     cb = utils.create_solver(
         rigid_config=config, X=X, Q=Q, block_PC=block_PC, wall_PC=wall_PC
     )
@@ -156,7 +152,7 @@ def test_apply_PC(block_PC, wall_PC):
 def test_evolve_rigid_bodies():
     N_rigid = 3
     X, Q = utils.create_random_positions(N_rigid)
-    _, config = utils.load_config(struct_shell_12)
+    _, config = utils.load_config(utils.struct_shell_12)
     cb = utils.create_solver(rigid_config=config, X=X, Q=Q)
 
     U = np.random.randn(6 * N_rigid)
