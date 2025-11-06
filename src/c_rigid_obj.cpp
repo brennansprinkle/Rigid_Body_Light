@@ -1,24 +1,15 @@
-// ################################################################################
-// ############### Basic C++ - Python bindings
-// ####################################
-// ################################################################################
-// ################################################################################
-// ################# Interfacing Eigen and Python without copying data
-// ############
-// ################################################################################
 #include <Eigen/Core>
 #include <Eigen/Dense>
 #include <Eigen/src/Core/Matrix.h>
+#include <chrono>
 #include <cmath>
+#include <iostream>
 #include <nanobind/eigen/dense.h>
 #include <nanobind/eigen/sparse.h>
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 #include <nanobind/stl/vector.h>
 #include <omp.h>
-// #include <lapacke.h>
-#include <chrono>
-#include <iostream>
 #include <random>
 #include <sys/time.h>
 #include <vector>
@@ -37,8 +28,7 @@ double timeNow() {
 }
 
 void mobilityUFRPY(real rx, real ry, real rz, real &Mxx, real &Mxy, real &Mxz,
-                   real &Myy, real &Myz, real &Mzz, int i, int j,
-                   real invaGPU) {
+                   real &Myy, real &Myz, real &Mzz, int i, int j, real inv_a) {
   /*
       mobilityUFRPY computes the 3x3 RPY mobility
       between blobs i and j normalized with 8 pi eta a
@@ -54,14 +44,17 @@ void mobilityUFRPY(real rx, real ry, real rz, real &Mxx, real &Mxy, real &Mxz,
     Myz = 0;
     Mzz = Mxx;
   } else {
-    rx = rx * invaGPU; // Normalize distance with hydrodynamic radius
-    ry = ry * invaGPU;
-    rz = rz * invaGPU;
+    rx = rx * inv_a;
+    ry = ry * inv_a;
+    rz = rz * inv_a;
     real r2 = rx * rx + ry * ry + rz * rz;
     real r = std::sqrt(r2);
-    // We should not divide by zero but std::numeric_limits<real>::min() does
-    // not work in the GPU real invr = (r > std::numeric_limits<real>::min()) ?
-    // (real(1.0) / r) : (real(1.0) / std::numeric_limits<real>::min())
+    if (r < 1e-12) {
+      std::cout << "ERROR: TWO BLOBS ARE OVERLAPPING OR TOO CLOSELY "
+                   "POSITIONED. i="
+                << i << ", j=" << j << ", r=" << r * (1.0 / inv_a) << "\n";
+      exit(EXIT_FAILURE);
+    }
     real invr = real(1.0) / r;
     real invr2 = invr * invr;
     real c1, c2;
@@ -107,9 +100,7 @@ void mobilityUFSingleWallCorrection(real rx, real ry, real rz, real &Mxx,
     Mzz += -(9 * invZi - 4 * invZi3 + invZi5) / real(6.0);
   } else {
     real h_hat = hj / rz;
-    real invR =
-        1.0 / std::sqrt(rx * rx + ry * ry +
-                        rz * rz); // = 1 / r; //TODO: Make this a fast inv sqrt
+    real invR = 1.0 / std::sqrt(rx * rx + ry * ry + rz * rz);
     real ex = rx * invR;
     real ey = ry * invR;
     real ez = rz * invR;
@@ -166,7 +157,7 @@ class CManyBodies {
   std::vector<Vector> X_n;
 
   // Body configurations
-  Matrix Ref_Cfg;
+  Matrix ref_cfg;
   int N_blb;
   bool parametersSet = false;
   SparseM K, KT, Kinv;
@@ -178,27 +169,22 @@ public:
   static constexpr auto precision = "double";
 #endif
 
-  void removeMean(Matrix &Cfg) {
-    Vector mean = Cfg.colwise().mean();
-    // std::cout << "Old mean: " << mean.transpose() << "\n";
-    for (int i = 0; i < Cfg.rows(); ++i) {
-      Cfg.row(i) = Cfg.row(i) - mean.transpose();
+  void removeMean(Matrix &cfg) {
+    Vector mean = cfg.colwise().mean();
+    for (int i = 0; i < cfg.rows(); ++i) {
+      cfg.row(i) = cfg.row(i) - mean.transpose();
     }
   }
 
-  void setParameters(real a, real dt, real kBT, real eta, Matrix &Cfg) {
-    // TODO: Put the list of parameters into a structure
+  void setParameters(real a, real dt, real kBT, real eta, Matrix &cfg) {
     this->a = a;
     this->dt = dt;
     this->kBT = kBT;
     this->eta = eta;
-    removeMean(Cfg);
+    removeMean(cfg);
 
-    // std::cout << "New mean of Ref Config changed to: "
-    // << (Cfg.colwise().mean()).transpose() << "\n";
-
-    this->Ref_Cfg = Cfg;
-    this->N_blb = Ref_Cfg.rows();
+    this->ref_cfg = cfg;
+    this->N_blb = ref_cfg.rows();
     this->parametersSet = true;
 
     this->M_scale = 1.0;
@@ -218,7 +204,7 @@ public:
     for (int j = 0; j < N_bod; ++j) {
       Quat Q_j;
       Vector X_j(3);
-      // set quaternion
+
       Q_j.x() = Q(4 * j + 1);
       Q_j.y() = Q(4 * j + 2);
       Q_j.z() = Q(4 * j + 3);
@@ -229,7 +215,7 @@ public:
       } else {
         Q_n[j] = Q_j;
       }
-      // set disp
+
       X_j(0) = X(3 * j + 0);
       X_j(1) = X(3 * j + 1);
       X_j(2) = X(3 * j + 2);
@@ -249,12 +235,12 @@ public:
     Vector X_0_j(3);
     for (int j = 0; j < N_bod; ++j) {
       Q_j = Q_n[j];
-      // set quaternion
+
       Qout(4 * j + 1) = Q_j.x();
       Qout(4 * j + 2) = Q_j.y();
       Qout(4 * j + 3) = Q_j.z();
       Qout(4 * j + 0) = Q_j.w();
-      // set disp
+
       X_0_j = X_n[j];
       Xout(3 * j + 0) = X_0_j(0);
       Xout(3 * j + 1) = X_0_j(1);
@@ -265,10 +251,8 @@ public:
   }
 
   Matrix get_r_vecs(Vector &X_0, Quat &Q) {
-    // ...
     Matrix3 rotation_matrix = Q.toRotationMatrix();
-    // std::cout << rotation_matrix << '\n';
-    Matrix r_vectors = Ref_Cfg * rotation_matrix.transpose();
+    Matrix r_vectors = ref_cfg * rotation_matrix.transpose();
     Vector r_j;
     for (int j = 0; j < N_blb; ++j) {
       r_vectors.row(j) += X_0;
@@ -277,7 +261,6 @@ public:
   }
 
   std::vector<real> single_body_pos(Vector &X_0, Quat &Q) {
-    // ...
     Matrix r_vectors = get_r_vecs(X_0, Q);
     Vector r_j;
     std::vector<real> pos;
@@ -293,7 +276,7 @@ public:
 
   std::vector<real> r_vecs_from_cfg(std::vector<Vector> &Xin,
                                     std::vector<Quat> &Qin) {
-    int size = N_bod * (Ref_Cfg.size());
+    int size = N_bod * (ref_cfg.size());
     std::vector<real> pos;
     pos.reserve(size);
     std::vector<real> pos_j;
@@ -335,11 +318,6 @@ public:
     // KTKinv.block<3,3>(3,0) = -1.0*S*C*Ainv;
     KTKinv.block<3, 3>(3, 3) = S;
 
-    /*
-    std::cout << "MATRIX NORM ERROR:\n";
-    std::cout << (KTK*KTKinv -  Matrix::Identity(6,6)).squaredNorm() << "\n";
-    */
-
     return KTKinv;
   }
 
@@ -360,10 +338,10 @@ public:
 
     // sum of r_i^{T}*r_i and sum of r_i*r_i^{T}
     // where r_i is in Ref config (for (KT*K)^-1)
-    double sumr2_cfg = Ref_Cfg.squaredNorm();
+    double sumr2_cfg = ref_cfg.squaredNorm();
     Matrix3 MOI_cfg = Matrix3::Zero();
     for (int k = 0; k < N_blb; ++k) {
-      r_k = Ref_Cfg.row(k);
+      r_k = ref_cfg.row(k);
       MOI_cfg += r_k * r_k.transpose();
     }
 
@@ -388,9 +366,9 @@ public:
         tripletList.push_back(Trip(offset + 3 * k + 0, 6 * j + 0, 1.0));
         tripletList.push_back(Trip(offset + 3 * k + 1, 6 * j + 1, 1.0));
         tripletList.push_back(Trip(offset + 3 * k + 2, 6 * j + 2, 1.0));
-        //
+
         r_k = r_vectors.row(k) - Xin[j].transpose();
-        //
+
         tripletList.push_back(Trip(offset + 3 * k + 0, 6 * j + 4, r_k(2)));
         tripletList.push_back(Trip(offset + 3 * k + 0, 6 * j + 5, -r_k(1)));
         tripletList.push_back(Trip(offset + 3 * k + 1, 6 * j + 5, r_k(0)));
@@ -411,22 +389,12 @@ public:
   }
 
   void set_K_mats() {
-    //
     if (!cfg_set) {
       std::cout << "ERROR CONFIG NOT INITIALIZED YET!!\n";
     }
 
     std::tie(K, Kinv) = Make_K_Kinv(X_n, Q_n);
     KT = K.transpose();
-
-    //     Vector U(6*N_bod);
-    //     U.setOnes();
-    //     Vector KU = K*U;
-    //     std::cout << "error Kinv*K*U: " << (Kinv*KU-U).norm() << "\n";
-
-    //      SparseM KTK = (KT * K);
-    //      std::cout << "MATRIX NORM ERROR:\n";
-    //      std::cout << (KTK*KTKi_mat) << "\n";
   }
 
   Vector K_x_U(const Vector &U) { return K * U; }
@@ -436,28 +404,16 @@ public:
   Vector KTinv_x_F(const Vector &F) { return Kinv.transpose() * F; }
 
   Vector KT_x_Lam(const Vector &Lam) { return KT * Lam; }
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  ///////////////////////////   PRECONDITIONER/Solver FUNCTIONS
-
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
+  /////////////////   preconditioner/solver functions /////////////////
   template <class AVector> Matrix rotne_prager_tensor(AVector &r_vectors) {
 
-    // Compute scalar functions f(r) and g(r)
     real norm_fact_f = real(1.0) / (8.0 * M_PI * eta * a);
 
-    // Build mobility matrix of size 3N \times 3N
     int N = r_vectors.size();
     int Nparts = N / 3;
 
-    real invaGPU = real(1.0) / a;
+    real inv_a = real(1.0) / a;
 
     real rx, ry, rz;
 
@@ -473,7 +429,7 @@ public:
         ry = r_vectors[3 * i + 1] - r_vectors[3 * j + 1];
         rz = r_vectors[3 * i + 2] - r_vectors[3 * j + 2];
 
-        mobilityUFRPY(rx, ry, rz, Mxx, Mxy, Mxz, Myy, Myz, Mzz, i, j, invaGPU);
+        mobilityUFRPY(rx, ry, rz, Mxx, Mxy, Mxz, Myy, Myz, Mzz, i, j, inv_a);
         Myx = Mxy;
         Mzx = Mxz;
         Mzy = Myz;
@@ -511,18 +467,10 @@ public:
 
     std::vector<real> r_vectors;
 
-    // double t, elapsed;
-
     for (int i = 0; i < N_bod; ++i) {
       r_vectors = single_body_pos(X_n[i], Q_n[i]);
-      // t = timeNow();
-      Mob = rotne_prager_tensor(r_vectors); // Dense_M(r_vectors); //
-      // elapsed = timeNow() - t;
-      // printf( "Mob time = %g\n", elapsed );
-      // t = timeNow();
+      Mob = rotne_prager_tensor(r_vectors);
       Minv = Mob.inverse();
-      // elapsed = timeNow() - t;
-      // printf( "Inv time = %g\n", elapsed );
 
       for (int rw = 0; rw < Blk_sz; ++rw) {
         for (int cl = 0; cl < Blk_sz; ++cl) {
@@ -533,21 +481,17 @@ public:
     }
     Blk_Mob.setFromTriplets(tripletList.begin(), tripletList.end());
 
-    // std::cout << mat << "\n";
-
     return Blk_Mob;
   }
 
   template <class AVector> SparseM diag_invM(AVector &r_vectors) {
 
-    // INVERSE
     real norm_fact_f = real(8.0 * M_PI * eta * a);
 
-    // Build mobility matrix of size 3N \times 3N
     int N = r_vectors.size();
     int Nparts = N / 3;
 
-    real invaGPU = real(1.0) / a;
+    real inv_a = real(1.0) / a;
 
     real rx = 0;
     real ry = 0;
@@ -563,7 +507,7 @@ public:
     for (int i = 0; i < Nparts; ++i) {
       int j = i;
 
-      mobilityUFRPY(rx, ry, rz, Mxx, Mxy, Mxz, Myy, Myz, Mzz, i, j, invaGPU);
+      mobilityUFRPY(rx, ry, rz, Mxx, Mxy, Mxz, Myy, Myz, Mzz, i, j, inv_a);
       Myx = Mxy;
       Mzx = Mxz;
       Mzy = Myz;
@@ -597,12 +541,10 @@ public:
   }
 
   SparseM PC_invM() {
-    // std::cout << "Making PC mats\n";
     if (!block_diag_PC) {
       std::vector<real> r_vectors = multi_body_pos();
       return diag_invM(r_vectors);
     } else {
-      // std::cout << "using Block diag PC\n";
       return Block_diag_invM();
     }
   }
@@ -656,36 +598,12 @@ public:
 
     Vector RHS = -F - KT * (invM * Slip);
 
-    // double t, elapsed;
-
-    // t = timeNow();
-
-    // elapsed = timeNow() - t;
-    // printf( "Block decompose time = %g\n", elapsed );
-
-    // t = timeNow();
     Vector b(6);
     Vector U(6 * N_bod);
     for (int i = 0; i < N_bod; ++i) {
       b = RHS.segment<6>(6 * i);
       U.segment<6>(6 * i) = N_lu[i].solve(b);
     }
-    // elapsed = timeNow() - t;
-    // printf( "Block solve time = %g\n", elapsed );
-
-    // SPARSE SOLVE IS SLOWER TO FACTOR. SAME TO SOLVE
-    /*
-    static Eigen::SimplicialLLT<SparseM> chol(Ninv);
-    elapsed = timeNow() - t;
-    printf( "Sparse decompose time = %g\n", elapsed );
-    t = timeNow();
-    Vector temp = chol.solve(RHS);
-    elapsed = timeNow() - t;
-    printf( "Sparse solve time = %g\n", elapsed );
-    */
-
-    // std::cout << "U is: " << U << "\n";
-    // std::cout << "solve U is: " << chol.solve(RHS) << "\n";
 
     Vector Lambda = M_scale * (invM * (Slip + K * U));
 
@@ -742,7 +660,6 @@ public:
   Vector M_half_W() {
     std::vector<real> r_vectors = multi_body_pos();
     int sz = 3 * N_bod * N_blb;
-    // Make random vector
     Vector W = rand_vector(sz);
     Vector Out(sz);
 
@@ -776,17 +693,8 @@ public:
     return Out;
   }
 
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+  /////////////////   Dynamics/time integration /////////////////
 
-  ///////////////////////////   Dynamics/time integration
-
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   Quat Q_from_Om(Vector &Om) {
     // ...
     Quat Q_rot = Quat::Identity();
@@ -800,6 +708,7 @@ public:
   }
 
   std::tuple<std::vector<Quat>, std::vector<Vector>> update_X_Q(Vector &U) {
+    // TODO the input should not be called U since it has the units of X
     std::vector<Quat> Qin(Q_n);
     std::vector<Vector> Xin(X_n);
 
@@ -810,9 +719,7 @@ public:
     for (int j = 0; j < N_bod; ++j) {
       U_j = U.segment<3>(6 * j);
       Om_j = U.segment<3>(6 * j + 3);
-      // set quaternion
       Q_rot = Q_from_Om(Om_j);
-      // Update
       Qin[j] = Q_rot * Qin[j];
       Qin[j].normalize();
       Xin[j] = Xin[j] + U_j;
@@ -840,13 +747,11 @@ public:
   }
 
   Vector rand_vector(int N) {
-    // RNGesus
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
     std::default_random_engine generator(seed);
     std::normal_distribution<double> distribution(0.0, 1.0);
 
     Vector W = Vector::Zero(N);
-    // Make random vector
     for (int k = 0; k < N; ++k) {
       W[k] = distribution(generator);
     }
@@ -858,7 +763,6 @@ public:
 
     double delta = 1.0e-4;
 
-    // Make random vector
     Vector W = rand_vector(6 * N_bod);
 
     std::vector<Quat> Qp;
@@ -878,8 +782,6 @@ public:
     Vector out = (1.0 / delta) * Kinvp.transpose() * W -
                  (1.0 / delta) * Kinvm.transpose() * W;
 
-    // std::cout << out << "n";
-
     return (KT * out);
   }
 
@@ -888,7 +790,6 @@ public:
     double delta = 1.0e-4;
 
     int sz = 3 * N_bod * N_blb;
-    // Make random vector
     Vector W = rand_vector(sz);
 
     Vector UOM = Kinv * W;
@@ -916,10 +817,7 @@ public:
   template <class AVector> auto M_RFD_cfgs(AVector &U, double delta) {
 
     int sz = 3 * N_bod * N_blb;
-    // Make random vector
     Vector W = rand_vector(sz);
-
-    // Vector UOM = Kinv*W;
 
     std::vector<Quat> Qp;
     std::vector<Vector> Xp;
@@ -939,8 +837,6 @@ public:
   template <class AVector> Vector M_RFD_from_U(AVector &U, AVector &W) {
 
     double delta = 1.0e-3;
-
-    // Make random vector
 
     std::vector<Quat> Qp;
     std::vector<Vector> Xp;
@@ -965,8 +861,6 @@ public:
   template <class AVector> Vector KT_RFD_from_U(AVector &U, AVector &W) {
 
     double delta = 1.0e-3;
-
-    // Make random vector
 
     std::vector<Quat> Qp;
     std::vector<Vector> Xp;
@@ -1025,7 +919,7 @@ public:
     M_rand.setZero();
     Matrix Dif(3 * N_bod * N_blb, 3 * N_bod * N_blb);
 
-    double M_scale = M.norm(); //.lpNorm<2>();
+    double M_scale = M.norm();
 
     for (int i = 0; i < N; ++i) {
       if (i % (N / 10) == 0) {
@@ -1034,8 +928,7 @@ public:
       Vector M_half_W1 = M_half_W();
       M_rand += M_half_W1 * M_half_W1.transpose();
       Dif = ((1.0 / (double)i) * M_rand - M);
-      error(i) = (1.0 / M_scale) *
-                 Dif.norm(); //.lpNorm<2>(); //.lpNorm<Eigen::Infinity>();
+      error(i) = (1.0 / M_scale) * Dif.norm();
     }
     return error;
   }
@@ -1060,9 +953,6 @@ public:
       if (split_rand) {
         M_half_W2 = M_half_W();
       }
-
-      // std::cout << "M*w1: " << M_half_W1.segment<3>(0) << "\n";
-      // std::cout << "M*w1: " << M_half_W2.segment<3>(0) << "\n";
 
       // Make M_RFD
       std::cout << "Before RFD\n";
@@ -1100,8 +990,6 @@ public:
 
     Vector RHS(3 * N_bod * N_blb + 6 * N_bod);
     RHS << Slip, Force;
-
-    // std::cout << RHS << "\n";
 
     return RHS;
   }
