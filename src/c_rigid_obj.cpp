@@ -636,8 +636,7 @@ public:
     return B.asDiagonal();
   }
 
-  template <class AVector>
-  Vector apply_M(AVector &F, std::vector<real> &r_vectors) {
+  Vector apply_M(const Vector &F, std::vector<real> r_vectors) {
     /*
      returns U = B(r) * { M(r) * [ B(r) * F ] }
      F and r are 3*Nblob*Nbody vectors
@@ -1039,6 +1038,7 @@ NB_MODULE(c_rigid, m) {
       .def("get_Kinv", &CManyBodies::get_Kinv, "get Kinv")
       .def("evolve_X_Q", &CManyBodies::evolve_X_Q, "evolve rigid bodies",
            nb::arg("U"))
+      .def("apply_M", &CManyBodies::apply_M, "mobility matrix mult", nb::arg("F"), nb::arg("r_vecs"))
       .def_prop_ro_static(
           "precision", [](nb::object) { return CManyBodies::precision; },
           R"pbdoc(Compilation precision, a string holding either single or double.)pbdoc");
