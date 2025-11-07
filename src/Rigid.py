@@ -70,6 +70,11 @@ class RigidBody:
         self.__check_input_size(lambda_vec=lambda_vec, U_vec=U_vec)
         in_vec = np.concatenate((lambda_vec, U_vec))
         return self.cb.apply_PC(in_vec)
+    
+    def apply_M(self, F):
+        self.__check_input_size(lambda_vec=F)
+        r_vecs = self.get_blob_positions()
+        return self.cb.apply_M(F, r_vecs.flatten())
 
     def get_K(self):
         return self.cb.get_K()

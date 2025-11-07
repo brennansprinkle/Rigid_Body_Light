@@ -148,6 +148,23 @@ def test_apply_PC(block_PC, wall_PC):
         U_bad_size = np.random.randn(6 * N_rigid - 3)
         cb.apply_PC(lambda_vec, U_bad_size)
 
+def test_apply_M():
+    N_rigid = 2
+    X, Q = utils.create_random_positions(N_rigid)
+    _, config = utils.load_config(utils.struct_shell_12)
+    cb = utils.create_solver(rigid_config=config, X=X, Q=Q)
+    blobs_per_body = config.shape[0]
+
+    F_bad_size = np.random.randn(3 * blobs_per_body * N_rigid - 4)
+    with pytest.raises(RuntimeError):
+        cb.apply_M(F_bad_size)
+
+    F = np.random.randn(3 * blobs_per_body * N_rigid)
+    result = cb.apply_M(F)
+    shape = (3 * blobs_per_body * N_rigid,)
+    assert result.shape == shape
+    assert np.linalg.norm(result) > 0.0
+
 
 def test_evolve_rigid_bodies():
     N_rigid = 3
