@@ -1,19 +1,21 @@
 from Rigid import c_rigid as crigid
 import numpy as np
+from typing import TypeAlias
 
+vector: TypeAlias = list | np.ndarray
 
 class RigidBody:
-    X_shape = None
-    Q_shape = None
+    X_shape: tuple[int, ...]
+    Q_shape: tuple[int, ...]
 
     def __init__(
         self,
         rigid_config,
-        X,
-        Q,
-        a,
-        eta,
-        dt,
+        X: vector,
+        Q: vector,
+        a: float,
+        eta: float,
+        dt: float,
         wall_PC=False,
         block_PC=False,
     ):
@@ -34,59 +36,59 @@ class RigidBody:
 
         self.set_config(X, Q)
 
-    def get_config(self):
+    def get_config(self) -> tuple[np.ndarray, np.ndarray]:
         X, Q = self.cb.getConfig()
 
         X = X.reshape(self.X_shape)
         Q = Q.reshape(self.Q_shape)
         return X, Q
 
-    def set_config(self, X, Q):
+    def set_config(self, X: vector, Q: vector) -> None:
         self.__check_and_set_configs(X, Q)
-        X = X.flatten()
-        Q = Q.flatten()
+        X = np.array(X).flatten()
+        Q = np.array(Q).flatten()
         self.cb.setConfig(X, Q)
         self.cb.set_K_mats()
 
         self.total_blobs = self.N_bodies * self.blobs_per_body
 
-    def get_blob_positions(self):
+    def get_blob_positions(self) -> np.ndarray:
         shape = (-1, 3) if len(self.X_shape) == 2 else (-1)
         return np.array(self.cb.multi_body_pos()).reshape(shape)
 
-    def KT_dot(self, lambda_vec):
+    def KT_dot(self, lambda_vec: vector) -> np.ndarray:
         self.__check_input_size(lambda_vec=lambda_vec)
         result = self.cb.KT_x_Lam(lambda_vec)
         shape = (-1, 3) if len(self.X_shape) == 2 else (-1)
         return np.array(result).reshape(shape)
 
-    def K_dot(self, U):
+    def K_dot(self, U: vector) -> np.ndarray:
         self.__check_input_size(U_vec=U)
         result = self.cb.K_x_U(U)
         shape = (-1, 3) if len(self.X_shape) == 2 else (-1)
         return np.array(result).reshape(shape)
 
-    def apply_PC(self, lambda_vec, U_vec):
+    def apply_PC(self, lambda_vec: vector, U_vec: vector) -> np.ndarray:
         self.__check_input_size(lambda_vec=lambda_vec, U_vec=U_vec)
         in_vec = np.concatenate((lambda_vec, U_vec))
         return self.cb.apply_PC(in_vec)
-    
-    def apply_M(self, F):
+
+    def apply_M(self, F: vector) -> np.ndarray:
         self.__check_input_size(lambda_vec=F)
         r_vecs = self.get_blob_positions()
         return self.cb.apply_M(F, r_vecs.flatten())
 
-    def get_K(self):
+    def get_K(self) -> np.ndarray:
         return self.cb.get_K()
 
-    def get_Kinv(self):
+    def get_Kinv(self) -> np.ndarray:
         return self.cb.get_Kinv()
 
-    def evolve_rigid_bodies(self, U):
+    def evolve_rigid_bodies(self, U: vector):
         self.__check_input_size(U_vec=U)
         self.cb.evolve_X_Q(U)
 
-    def __check_and_set_configs(self, X, Q):
+    def __check_and_set_configs(self, X: vector, Q: vector):
         x_size = np.prod(np.shape(X))
         q_size = np.prod(np.shape(Q))
 
@@ -102,17 +104,19 @@ class RigidBody:
             raise RuntimeError("X and Q must have the same number of bodies")
 
         self.N_bodies = nx
-        self.X_shape = X.shape
-        self.Q_shape = Q.shape
+        self.X_shape = np.shape(X)
+        self.Q_shape = np.shape(Q)
 
-    def __check_input_size(self, lambda_vec=None, U_vec=None):
+    def __check_input_size(
+        self, lambda_vec: vector | None = None, U_vec: vector | None = None
+    ):
         if lambda_vec is not None:
-            if lambda_vec.size != 3 * self.total_blobs:
+            if np.size(lambda_vec) != 3 * self.total_blobs:
                 raise RuntimeError(
-                    f"lambda must have total size 3*N_blobs = {3 * self.total_blobs}. lambda_vec shape: {lambda_vec.shape}"
+                    f"lambda must have total size 3*N_blobs = {3 * self.total_blobs}. lambda_vec shape: {np.shape(lambda_vec)}"
                 )
         if U_vec is not None:
-            if U_vec.size != 6 * self.N_bodies:
+            if np.size(U_vec) != 6 * self.N_bodies:
                 raise RuntimeError(
-                    f"U must have total size 6*N_bodies = {6*self.N_bodies}. U shape: {U_vec.shape}"
+                    f"U must have total size 6*N_bodies = {6*self.N_bodies}. U shape: {np.shape(U_vec)}"
                 )
