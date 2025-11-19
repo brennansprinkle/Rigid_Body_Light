@@ -613,7 +613,7 @@ public:
     return Out;
   }
 
-  DiagM make_damp_mat(std::vector<real> &r_vectors) {
+  DiagM make_damp_mat(const std::vector<real> &r_vectors) {
     /*
      matrix used to regularise the mobility matrix to allow for particle-wall
      overlaps see Balboa Usabiaga, Delmotte, and Donev 2017 appendix A
@@ -636,7 +636,7 @@ public:
     return B.asDiagonal();
   }
 
-  Vector apply_M(const Vector &F, std::vector<real> r_vectors) {
+  Vector apply_M(const Vector &F, const std::vector<real> &r_vectors) {
     /*
      returns U = B(r) * { M(r) * [ B(r) * F ] }
      F and r are 3*Nblob*Nbody vectors
