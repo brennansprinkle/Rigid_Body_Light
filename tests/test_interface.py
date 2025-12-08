@@ -135,18 +135,19 @@ def test_apply_PC(block_PC, wall_PC):
     )
     blobs_per_body = config.shape[0]
 
-    lambda_vec = np.random.randn(3 * blobs_per_body * N_rigid)
-    U = np.random.randn(6 * N_rigid)
-    PC = cb.apply_PC(lambda_vec, U)
+    u_slip = np.random.randn(3 * blobs_per_body * N_rigid)
+    F = np.random.randn(6 * N_rigid)
+    lambda_vec, U = cb.apply_PC(u_slip, F)
 
-    assert np.linalg.norm(PC) > 0.0
+    assert np.linalg.norm(lambda_vec) > 0.0
+    assert np.linalg.norm(U) > 0.0
 
     with pytest.raises(RuntimeError):
-        lambda_bad_size = np.random.randn(3 * blobs_per_body * N_rigid - 5)
-        cb.apply_PC(lambda_bad_size, U)
+        u_slip_bad_size = np.random.randn(3 * blobs_per_body * N_rigid - 5)
+        cb.apply_PC(u_slip_bad_size, F)
     with pytest.raises(RuntimeError):
-        U_bad_size = np.random.randn(6 * N_rigid - 3)
-        cb.apply_PC(lambda_vec, U_bad_size)
+        F_bad_size = np.random.randn(6 * N_rigid - 3)
+        cb.apply_PC(u_slip, F_bad_size)
 
 def test_apply_M():
     N_rigid = 2

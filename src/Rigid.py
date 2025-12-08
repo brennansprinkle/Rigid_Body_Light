@@ -68,8 +68,10 @@ class RigidBody:
 
     def apply_PC(self, u_slip, F):
         self.__check_input_size(lambda_vec=u_slip, U_vec=F)
-        in_vec = np.concatenate((u_slip, F))
-        return self.cb.apply_PC(in_vec)
+        PC = self.cb.apply_PC(np.concatenate((u_slip, F)))
+        lambda_vec = np.array(PC[: 3 * self.total_blobs])
+        U = np.array(PC[3 * self.total_blobs :])
+        return lambda_vec, U
 
     def apply_saddle(self, lambda_vec, U):
         self.__check_input_size(lambda_vec=lambda_vec, U_vec=U)
