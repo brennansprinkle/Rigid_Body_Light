@@ -672,26 +672,6 @@ public:
     return Out;
   }
 
-  template <class AVector> Vector apply_Saddle(AVector &IN) {
-    /*
-   Sprinkle et al 2017 eq 6:
-      | M    -K | | lambda | = | -u |
-      | -K.T  0 | | U      |   | -F |
-   */
-    std::vector<real> r_vectors = multi_body_pos();
-
-    Vector Lambda = IN.head(3 * N_bod * N_blb);
-    Vector U = IN.tail(6 * N_bod);
-
-    Vector Slip = M_scale * apply_M(Lambda, r_vectors) - K * U;
-    Vector F = -KT * Lambda;
-
-    Vector Out(3 * N_bod * N_blb + 6 * N_bod);
-    Out << Slip, F;
-
-    return Out;
-  }
-
   /////////////////   Dynamics/time integration /////////////////
 
   Quat Q_from_Om(Vector &Om) {

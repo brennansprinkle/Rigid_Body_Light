@@ -166,6 +166,33 @@ def test_apply_M():
     assert np.linalg.norm(result) > 0.0
 
 
+def test_apply_saddle():
+    N_rigid = 2
+    X, Q = utils.create_random_positions(N_rigid)
+    _, config = utils.load_config(utils.struct_shell_12)
+    cb = utils.create_solver(rigid_config=config, X=X, Q=Q)
+    blobs_per_body = config.shape[0]
+
+    lambda_bad_size = np.random.randn(3 * blobs_per_body * N_rigid - 2)
+    U_bad_size = np.random.randn(6 * N_rigid - 1)
+    with pytest.raises(RuntimeError):
+        cb.apply_saddle(lambda_bad_size, np.random.randn(6 * N_rigid))
+    with pytest.raises(RuntimeError):
+        cb.apply_saddle(np.random.randn(3 * blobs_per_body * N_rigid), U_bad_size)
+
+    lambda_vec = np.random.randn(3 * blobs_per_body * N_rigid)
+    U = np.random.randn(6 * N_rigid)
+    slip, F = cb.apply_saddle(lambda_vec, U)
+
+    shape_slip = (3 * blobs_per_body * N_rigid,)
+    shape_F = (6 * N_rigid,)
+
+    assert slip.shape == shape_slip
+    assert F.shape == shape_F
+    assert np.linalg.norm(slip) > 0.0
+    assert np.linalg.norm(F) > 0.0
+
+
 def test_evolve_rigid_bodies():
     N_rigid = 3
     X, Q = utils.create_random_positions(N_rigid)

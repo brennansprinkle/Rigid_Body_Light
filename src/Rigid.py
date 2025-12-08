@@ -71,10 +71,17 @@ class RigidBody:
         in_vec = np.concatenate((u_slip, F))
         return self.cb.apply_PC(in_vec)
 
-    def apply_M(self, F):
-        self.__check_input_size(lambda_vec=F)
+    def apply_saddle(self, lambda_vec, U):
+        self.__check_input_size(lambda_vec=lambda_vec, U_vec=U)
+        slip = self.apply_M(f=lambda_vec) - self.K_dot(U).flatten()
+        F = self.KT_dot(lambda_vec).flatten()
+
+        return slip, F
+
+    def apply_M(self, f):
+        self.__check_input_size(lambda_vec=f)
         r_vecs = self.get_blob_positions()
-        return self.cb.apply_M(F, r_vecs.flatten())
+        return self.cb.apply_M(f, r_vecs.flatten())
 
     def get_K(self):
         return self.cb.get_K()
