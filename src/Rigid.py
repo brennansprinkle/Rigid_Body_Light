@@ -66,11 +66,11 @@ class RigidBody:
         shape = (-1, 3) if len(self.X_shape) == 2 else (-1)
         return np.array(result).reshape(shape)
 
-    def apply_PC(self, lambda_vec, U_vec):
-        self.__check_input_size(lambda_vec=lambda_vec, U_vec=U_vec)
-        in_vec = np.concatenate((lambda_vec, U_vec))
+    def apply_PC(self, u_slip, F):
+        self.__check_input_size(lambda_vec=u_slip, U_vec=F)
+        in_vec = np.concatenate((u_slip, F))
         return self.cb.apply_PC(in_vec)
-    
+
     def apply_M(self, F):
         self.__check_input_size(lambda_vec=F)
         r_vecs = self.get_blob_positions()
