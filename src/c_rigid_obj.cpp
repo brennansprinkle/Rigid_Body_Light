@@ -13,6 +13,7 @@
 #include <random>
 #include <sys/time.h>
 #include <vector>
+#include <stdexcept>
 
 #include "eigen_defines.h"
 
@@ -91,6 +92,9 @@ void mobilityUFSingleWallCorrection(real rx, real ry, real rz, real &Mxx,
      expression from the Swan and Brady paper for a finite size particle.
       Mobility is normalize by 8*pi*eta*a.
   */
+  if(hj < 0.0){
+    throw std::runtime_error("A blob has its center below the wall (z<0). Cannot compute mobility- check your configuration.");
+  }
   if (i == j) {
     real invZi = real(1.0) / hj;
     real invZi3 = invZi * invZi * invZi;
@@ -465,10 +469,8 @@ public:
     std::vector<Trip> tripletList;
     tripletList.reserve(Blk_sz * Blk_sz * N_bod);
 
-    std::vector<real> r_vectors;
-
     for (int i = 0; i < N_bod; ++i) {
-      r_vectors = single_body_pos(X_n[i], Q_n[i]);
+      std::vector<real> r_vectors = single_body_pos(X_n[i], Q_n[i]);
       Mob = rotne_prager_tensor(r_vectors);
       Minv = Mob.inverse();
 
