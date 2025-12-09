@@ -128,7 +128,7 @@ def test_get_K_Kinv():
 )
 def test_apply_PC(block_PC, wall_PC):
     N_rigid = 3
-    X, Q = utils.create_random_positions(N_rigid)
+    X, Q = utils.create_random_positions(N_rigid, wall_PC=wall_PC)
     _, config = utils.load_config(utils.struct_shell_12)
     cb = utils.create_solver(
         rigid_config=config, X=X, Q=Q, block_PC=block_PC, wall_PC=wall_PC

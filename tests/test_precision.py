@@ -32,7 +32,7 @@ def test_precision(precision):
 @pytest.mark.parametrize("precision", [np.float32, np.float64])
 def test_pc_precision(precision, block_PC, wall_PC):
     N_rigid = 3
-    X, Q = utils.create_random_positions(N_rigid)
+    X, Q = utils.create_random_positions(N_rigid, wall_PC=wall_PC)
     X = np.array(X, dtype=precision)
     Q = np.array(Q, dtype=precision)
     cb = utils.create_solver(X, Q, block_PC=block_PC, wall_PC=wall_PC)

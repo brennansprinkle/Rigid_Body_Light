@@ -35,12 +35,13 @@ def create_solver(X, Q, rigid_config=None, wall_PC=False, block_PC=False):
     )
 
 
-def create_random_positions(N):
+def create_random_positions(N, wall_PC=False):
     n_placed = 0
 
     X = np.zeros((N, 3))
     while n_placed < N:
-        x_i = np.random.uniform(-10.0, 10.0, (N, 3))
+        lower_limit = 1.0 if wall_PC else -10.0
+        x_i = np.random.uniform(lower_limit, 10.0, (N, 3))
         dists = np.linalg.norm(X[:n_placed, :] - x_i[n_placed, :], axis=1)
         if np.all(dists > 2.0):
             X[n_placed, :] = x_i[n_placed, :]
