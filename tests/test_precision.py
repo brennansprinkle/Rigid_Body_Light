@@ -37,9 +37,8 @@ def test_pc_precision(precision, block_PC, wall_PC):
     Q = np.array(Q, dtype=precision)
     cb = utils.create_solver(X, Q, block_PC=block_PC, wall_PC=wall_PC)
 
-    u_slip = np.random.randn(3 * cb.blobs_per_body * N_rigid).astype(precision)
-    F = np.random.randn(6 * N_rigid).astype(precision)
-    lambda_vec, U = cb.apply_PC(u_slip, F)
+    size = 3 * cb.blobs_per_body * N_rigid + 6 * N_rigid
+    x = np.random.randn(size).astype(precision)
+    PC = cb.apply_PC(x)
 
-    assert np.linalg.norm(lambda_vec) > 0.0
-    assert np.linalg.norm(U) > 0.0
+    assert np.linalg.norm(PC) > 0.0

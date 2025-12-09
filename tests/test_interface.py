@@ -135,19 +135,16 @@ def test_apply_PC(block_PC, wall_PC):
     )
     blobs_per_body = config.shape[0]
 
-    u_slip = np.random.randn(3 * blobs_per_body * N_rigid)
-    F = np.random.randn(6 * N_rigid)
-    lambda_vec, U = cb.apply_PC(u_slip, F)
+    size = 3 * blobs_per_body * N_rigid + 6 * N_rigid
+    b = np.random.randn(size)
+    PC = cb.apply_PC(b)
 
-    assert np.linalg.norm(lambda_vec) > 0.0
-    assert np.linalg.norm(U) > 0.0
+    assert PC.shape == (size,)
+    assert np.linalg.norm(PC) > 0.0
 
     with pytest.raises(RuntimeError):
-        u_slip_bad_size = np.random.randn(3 * blobs_per_body * N_rigid - 5)
-        cb.apply_PC(u_slip_bad_size, F)
-    with pytest.raises(RuntimeError):
-        F_bad_size = np.random.randn(6 * N_rigid - 3)
-        cb.apply_PC(u_slip, F_bad_size)
+        b_bad_size = np.random.randn(size - 4)
+        cb.apply_PC(b_bad_size)
 
 def test_apply_M():
     N_rigid = 2
@@ -174,24 +171,16 @@ def test_apply_saddle():
     cb = utils.create_solver(rigid_config=config, X=X, Q=Q)
     blobs_per_body = config.shape[0]
 
-    lambda_bad_size = np.random.randn(3 * blobs_per_body * N_rigid - 2)
-    U_bad_size = np.random.randn(6 * N_rigid - 1)
+    size = 3 * blobs_per_body * N_rigid + 6 * N_rigid
+    x = np.random.randn(size)
+
+    out = cb.apply_saddle(x)
+    assert out.shape == (size,)
+    assert np.linalg.norm(out) > 0.0
+
+    x_bad_size = np.random.randn(size - 2)
     with pytest.raises(RuntimeError):
-        cb.apply_saddle(lambda_bad_size, np.random.randn(6 * N_rigid))
-    with pytest.raises(RuntimeError):
-        cb.apply_saddle(np.random.randn(3 * blobs_per_body * N_rigid), U_bad_size)
-
-    lambda_vec = np.random.randn(3 * blobs_per_body * N_rigid)
-    U = np.random.randn(6 * N_rigid)
-    slip, F = cb.apply_saddle(lambda_vec, U)
-
-    shape_slip = (3 * blobs_per_body * N_rigid,)
-    shape_F = (6 * N_rigid,)
-
-    assert slip.shape == shape_slip
-    assert F.shape == shape_F
-    assert np.linalg.norm(slip) > 0.0
-    assert np.linalg.norm(F) > 0.0
+        cb.apply_saddle(x_bad_size)
 
 
 def test_evolve_rigid_bodies():

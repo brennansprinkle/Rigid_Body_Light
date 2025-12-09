@@ -66,19 +66,17 @@ class RigidBody:
         shape = (-1, 3) if len(self.X_shape) == 2 else (-1)
         return np.array(result).reshape(shape)
 
-    def apply_PC(self, u_slip, F):
-        self.__check_input_size(lambda_vec=u_slip, U_vec=F)
-        PC = self.cb.apply_PC(np.concatenate((u_slip, F)))
-        lambda_vec = np.array(PC[: 3 * self.total_blobs])
-        U = np.array(PC[3 * self.total_blobs :])
-        return lambda_vec, U
+    def apply_PC(self, b):
+        self.__check_input_size(system_input=b)
+        return self.cb.apply_PC(b)
 
-    def apply_saddle(self, lambda_vec, U):
-        self.__check_input_size(lambda_vec=lambda_vec, U_vec=U)
+    def apply_saddle(self, x):
+        self.__check_input_size(system_input=x)
+        lambda_vec = x[: 3 * self.total_blobs]
+        U = x[3 * self.total_blobs :]
         slip = self.apply_M(f=lambda_vec) - self.K_dot(U).flatten()
         F = self.KT_dot(lambda_vec).flatten()
-
-        return slip, F
+        return np.concatenate((slip, F))
 
     def apply_M(self, f):
         self.__check_input_size(lambda_vec=f)
@@ -114,7 +112,7 @@ class RigidBody:
         self.X_shape = X.shape
         self.Q_shape = Q.shape
 
-    def __check_input_size(self, lambda_vec=None, U_vec=None):
+    def __check_input_size(self, lambda_vec=None, U_vec=None, system_input=None):
         if lambda_vec is not None:
             if lambda_vec.size != 3 * self.total_blobs:
                 raise RuntimeError(
@@ -124,4 +122,11 @@ class RigidBody:
             if U_vec.size != 6 * self.N_bodies:
                 raise RuntimeError(
                     f"U must have total size 6*N_bodies = {6*self.N_bodies}. U shape: {U_vec.shape}"
+                )
+
+        if system_input is not None:
+            expected_size = 3 * self.total_blobs + 6 * self.N_bodies
+            if system_input.size != expected_size:
+                raise RuntimeError(
+                    f"Rigid system input vector must have total size 3*N_blobs + 6*N_bodies = {expected_size}. system_input shape: {system_input.shape}"
                 )
