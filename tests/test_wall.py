@@ -15,7 +15,7 @@ def test_above_wall():
     vec = np.random.randn(size)
     PC = cb.apply_PC(vec)
     saddle = cb.apply_saddle(vec)
-    M_applied = cb.apply_M(vec[: 3 * cb.blobs_per_body * N])
+    M_applied = cb.apply_M(vec[: 3 * cb.blobs_per_body * N], cb.get_blob_positions())
     assert np.linalg.norm(PC) > 0.0
     assert np.linalg.norm(saddle) > 0.0
     assert np.linalg.norm(M_applied) > 0.0
@@ -35,4 +35,4 @@ def test_under_wall():
     with pytest.raises(RuntimeError):
         cb.apply_PC(vec)
     with pytest.raises(RuntimeError):
-        cb.apply_M(vec[: 3 * cb.blobs_per_body * N])
+        cb.apply_M(vec[: 3 * cb.blobs_per_body * N], cb.get_blob_positions())

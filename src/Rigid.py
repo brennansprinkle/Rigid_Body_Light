@@ -74,14 +74,15 @@ class RigidBody:
         self.__check_input_size(system_input=x)
         lambda_vec = x[: 3 * self.total_blobs]
         U = x[3 * self.total_blobs :]
-        slip = self.apply_M(f=lambda_vec) - self.K_dot(U).flatten()
+        r_vecs = self.get_blob_positions().flatten()
+        slip = self.apply_M(forces=lambda_vec, positions=r_vecs) - self.K_dot(U).flatten()
         F = self.KT_dot(lambda_vec).flatten()
         return np.concatenate((slip, F))
 
-    def apply_M(self, f):
-        self.__check_input_size(lambda_vec=f)
-        r_vecs = self.get_blob_positions()
-        return self.cb.apply_M(f, r_vecs.flatten())
+    def apply_M(self, forces, positions,):
+        self.__check_input_size(lambda_vec=forces)
+        self.__check_input_size(lambda_vec=positions)
+        return self.cb.apply_M(forces, positions.flatten())
 
     def get_K(self):
         return self.cb.get_K()

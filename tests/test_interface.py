@@ -153,12 +153,15 @@ def test_apply_M():
     cb = utils.create_solver(rigid_config=config, X=X, Q=Q)
     blobs_per_body = config.shape[0]
 
-    F_bad_size = np.random.randn(3 * blobs_per_body * N_rigid - 4)
-    with pytest.raises(RuntimeError):
-        cb.apply_M(F_bad_size)
-
     F = np.random.randn(3 * blobs_per_body * N_rigid)
-    result = cb.apply_M(F)
+    pos = cb.get_blob_positions()
+    with pytest.raises(RuntimeError):
+        cb.apply_M(F[:-4], pos)
+    with pytest.raises(RuntimeError):
+        cb.apply_M(F, pos[:-3])
+
+
+    result = cb.apply_M(F, pos)
     shape = (3 * blobs_per_body * N_rigid,)
     assert result.shape == shape
     assert np.linalg.norm(result) > 0.0
