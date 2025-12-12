@@ -233,6 +233,9 @@ public:
   }
 
   auto getConfig() {
+    /**
+     * returns the rotations and positions of the bodies as two vectors of size (4*N_bodies) and (3*N_bodies)
+     */
     Vector Qout(4 * N_bod);
     Vector Xout(3 * N_bod);
     Quat Q_j;
@@ -280,6 +283,9 @@ public:
 
   std::vector<real> r_vecs_from_cfg(std::vector<Vector> &Xin,
                                     std::vector<Quat> &Qin) {
+    /*
+    gets all blob positions from body positions and orientations
+    */
     int size = N_bod * (ref_cfg.size());
     std::vector<real> pos;
     pos.reserve(size);
@@ -659,6 +665,11 @@ public:
   }
 
   Vector M_half_W() {
+    /*
+        returns sqrt(M) * W
+        where W is a vector of N(0,1) random variables
+        and the overlap-regularisation from Balboa Usabiaga is used
+    */
     std::vector<real> r_vectors = multi_body_pos();
     int sz = 3 * N_bod * N_blb;
     Vector W = rand_vector(sz);
@@ -667,9 +678,9 @@ public:
     Matrix Mob = rotne_prager_tensor(r_vectors);
     DiagM B = make_damp_mat(r_vectors);
     Matrix M = B * Mob * B;
-    Eigen::LLT<Matrix> chol(M);
-    Matrix L = chol.matrixL();
-    Out = (L * W);
+    Eigen::LLT<Matrix> chol(M); // calculates L such that M = L*L^T   ~ L = sqrt(M) = sqrt(B*Mob*B)
+    Matrix L = chol.matrixL();  // extract L
+    Out = (L * W); // sqrt(B*Mob*B) * W
 
     return Out;
   }
@@ -728,6 +739,9 @@ public:
   }
 
   Vector rand_vector(int N) {
+    /**
+     * Generates a vector of size N with entries (as doubles) drawn from N(0,1)
+     */
     unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
     std::default_random_engine generator(seed);
     std::normal_distribution<double> distribution(0.0, 1.0);
@@ -767,6 +781,9 @@ public:
   }
 
   Vector M_RFD() {
+    /*
+        returns 1/delta * [ M(r + delta/2 * K^-1 * W) - M(r - delta/2 * K^-1 * W) ] . W
+    */ 
 
     double delta = 1.0e-4;
 
@@ -780,22 +797,26 @@ public:
     std::vector<Quat> Qm;
     std::vector<Vector> Xm;
 
-    Vector Win = ((delta / 2.0) * UOM);
+    Vector Win = ((delta / 2.0) * UOM); // Win = delta/2 * K^-1 * W
     std::tie(Qp, Xp) = update_X_Q(Win);
-    std::vector<real> r_vec_p = r_vecs_from_cfg(Xp, Qp);
+    std::vector<real> r_vec_p = r_vecs_from_cfg(Xp, Qp); // r+ = r + delta/2 * K^-1 * W
     Win *= -1.0;
     std::tie(Qm, Xm) = update_X_Q(Win);
-    std::vector<real> r_vec_m = r_vecs_from_cfg(Xm, Qm);
+    std::vector<real> r_vec_m = r_vecs_from_cfg(Xm, Qm); // r- = r - delta/2 * K^-1 * W
 
-    Vector Mp = apply_M(W, r_vec_p);
-    Vector Mm = apply_M(W, r_vec_m);
+    Vector Mp = apply_M(W, r_vec_p); // Mp = M(r+) . W
+    Vector Mm = apply_M(W, r_vec_m); // Mm = M(r-) . W
 
-    Vector out = (1.0 / delta) * (Mp - Mm);
+    Vector out = (1.0 / delta) * (Mp - Mm); // 1/delta * [ M(r + delta/2 * K^-1 * W) - M(r - delta/2 * K^-1 * W) ] . W
 
     return out;
   }
 
   template <class AVector> auto M_RFD_cfgs(AVector &U, double delta) {
+    /*
+        returns (r+, r-)
+        where r+ (r-) are the blob coords after applying a positive (negative) random velocity U * delta/2 to the bodies
+    */
 
     int sz = 3 * N_bod * N_blb;
     Vector W = rand_vector(sz);
@@ -839,7 +860,11 @@ public:
     return out;
   }
 
-  template <class AVector> Vector KT_RFD_from_U(AVector &U, AVector &W) {
+  template <class AVector> Vector KT_RFD_from_U(AVector &U, AVector &W) {   
+    /*
+        W is a random slip on the blobs
+        and U the resultant random velocity on the bodies
+    */
 
     double delta = 1.0e-3;
 
@@ -857,9 +882,9 @@ public:
     std::tie(Kp, Kinvp) = Make_K_Kinv(Xp, Qp);
     std::tie(Km, Kinvm) = Make_K_Kinv(Xm, Qm);
 
-    Vector out = (1.0 / delta) * (Kp.transpose() * W - Km.transpose() * W);
+    Vector KT_RFD = (1.0 / delta) * (Kp.transpose() * W - Km.transpose() * W); // 1/delta * ( Kp . W - Km . W )
 
-    return out;
+    return KT_RFD;
   }
 
   void evolve_X_Q(Vector &U) {
@@ -915,6 +940,16 @@ public:
   }
 
   auto RHS_and_Midpoint(RefVector &Slip, RefVector &Force) {
+    /*
+        returns
+        | Slip  -  kBT/delta * [ M(r + delta/2 * K^-1 * W) - M(r - delta/2 * K^-1 * W) ] . W  -  sqrt(2 kBT / dt) M^(1/2) . W |
+        | -Force                                                                                                              |
+        also moves the configuration to the midpoint
+
+        if no Brownian motion, returns
+        | Slip   |
+        | -Force |
+    */
     double t, elapsed;
 
     std::vector<real> r_vecs;
@@ -951,11 +986,11 @@ public:
         c_2 = std::sqrt(2.0 * (kBT / dt));
         BI = c_2 * (M_half_W1);
       }
-      Vector BI_half = c_1 * M_half_W1;
+      Vector BI_half = c_1 * M_half_W1; // sqrt(2 kBT / dt) * M^(1/2) * W
       Vector UOm_half = (dt / 2.0) * Kinv * BI_half;
 
       std::tie(Qhalf, Xhalf) = update_X_Q(UOm_half);
-      r_vecs = r_vecs_from_cfg(Xhalf, Qhalf);
+      r_vecs = r_vecs_from_cfg(Xhalf, Qhalf); // r = r + sqrt(2 kBT dt)/2 * K^-1 * sqrt(2 kBT dt) * M^(1/2) * W
 
       set_K_mats();
 
