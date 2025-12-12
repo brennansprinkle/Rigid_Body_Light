@@ -159,12 +159,22 @@ def test_apply_M():
         cb.apply_M(F[:-4], pos)
     with pytest.raises(RuntimeError):
         cb.apply_M(F, pos[:-3])
+    with pytest.raises(RuntimeError):
+        cb.apply_M(F[:-1], pos[:-1])
 
 
     result = cb.apply_M(F, pos)
     shape = (3 * blobs_per_body * N_rigid,)
     assert result.shape == shape
     assert np.linalg.norm(result) > 0.0
+
+    # check that we can also apply to a longer vector (e.g., if we have extra blobs)
+    F = np.concatenate((F, np.random.randn(3)))
+    pos = np.concatenate((pos, np.random.uniform(1.0, 5.0, (1, 3))))
+    result_long = cb.apply_M(F, pos)
+    shape = (3 * blobs_per_body * N_rigid + 3,)
+    assert result_long.shape == shape
+    assert np.linalg.norm(result_long) > 0.0
 
 
 def test_apply_saddle():

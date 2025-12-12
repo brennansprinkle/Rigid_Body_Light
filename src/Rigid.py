@@ -79,10 +79,12 @@ class RigidBody:
         F = self.KT_dot(lambda_vec).flatten()
         return np.concatenate((slip, F))
 
-    def apply_M(self, forces, positions,):
-        self.__check_input_size(lambda_vec=forces)
-        self.__check_input_size(lambda_vec=positions)
-        return self.cb.apply_M(forces, positions.flatten())
+    def apply_M(self, forces, positions):
+        if np.size(positions) != np.size(forces):
+            raise RuntimeError("Positions and forces must be of the same size")
+        if np.size(positions) % 3 != 0 or np.size(forces) % 3 != 0:
+            raise RuntimeError("Positions and forces must have total length 3N, where N is the number of blobs")
+        return self.cb.apply_M(forces.flatten(), positions.flatten())
 
     def get_K(self):
         return self.cb.get_K()
